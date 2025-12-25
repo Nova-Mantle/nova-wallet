@@ -18,26 +18,23 @@ import { toast } from "sonner";
 export default function ChatPage() {
     const { isConnected, address } = useAccount();
     const { openConnectModal } = useConnectModal();
-    const { messages, isLoading, sendMessage, clearMessages } = useNovaAI();
+    const { messages, isLoading, sendMessage } = useNovaAI();
     const [sidebarOpen, setSidebarOpen] = useState(true);
-    const [pendingTransaction, setPendingTransaction] = useState<{
-        type: "send" | "receive" | "swap";
-        data: Record<string, string>;
-    } | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    const pendingTransaction = (() => {
+        const lastMessage = messages[messages.length - 1];
+        if (lastMessage?.action && lastMessage.role === "assistant") {
+            return {
+                type: lastMessage.action.type as "send" | "receive" | "swap",
+                data: lastMessage.action.data || {},
+            };
+        }
+        return null;
+    })();
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
-
-    useEffect(() => {
-        const lastMessage = messages[messages.length - 1];
-        if (lastMessage?.action && lastMessage.role === "assistant") {
-            setPendingTransaction({
-                type: lastMessage.action.type as "send" | "receive" | "swap",
-                data: lastMessage.action.data || {},
-            });
-        }
     }, [messages]);
 
     const handleSendMessage = (content: string) => {
@@ -61,13 +58,11 @@ export default function ChatPage() {
     };
 
     const handleTransactionCancel = () => {
-        setPendingTransaction(null);
         toast.info("Transaction cancelled");
     };
 
     const handleTransactionConfirm = () => {
         toast.success("Transaction submitted!");
-        setPendingTransaction(null);
     };
 
     if (!isConnected) {
@@ -112,7 +107,7 @@ export default function ChatPage() {
                         <ScrollArea className="flex-1 p-6">
                             <div className="text-center mb-6">
                                 <span className="text-sm text-muted-foreground">
-                                    Right now you're in chat with Nova AI
+                                    Right now you&apos;re in chat with Nova AI
                                 </span>
                             </div>
 
