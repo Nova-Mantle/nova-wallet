@@ -1,6 +1,6 @@
 "use client";
 
-import { useAccount, useBalance } from "wagmi";
+import { useAccount } from "wagmi";
 import { TrendingUp, ChevronRight } from "lucide-react";
 
 const mockTokens = [
@@ -10,8 +10,7 @@ const mockTokens = [
 ];
 
 export const PortfolioPanel = () => {
-  const { address, isConnected } = useAccount();
-  const { data: balance } = useBalance({ address });
+  const { isConnected } = useAccount();
 
   const totalValue = isConnected ? "$1,995.00" : "$0.00";
 

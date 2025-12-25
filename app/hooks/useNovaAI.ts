@@ -19,7 +19,7 @@ const getAIResponse = (userMessage: string): { content: string; action?: Message
   if (lower.includes("send") && (lower.includes("eth") || lower.includes("usdt") || lower.includes("usdc"))) {
     const amountMatch = lower.match(/(\d+\.?\d*)\s*(eth|usdt|usdc)/i);
     const addressMatch = lower.match(/0x[a-fA-F0-9]+/);
-    
+
     return {
       content: `I'll help you send tokens. Here's the transaction preview:\n\nI'm preparing to send ${amountMatch?.[1] || "the amount"} ${amountMatch?.[2]?.toUpperCase() || "tokens"} to ${addressMatch?.[0] || "the recipient"}.\n\nPlease review and confirm the transaction details.`,
       action: {
@@ -51,7 +51,7 @@ const getAIResponse = (userMessage: string): { content: string; action?: Message
   if (lower.includes("swap") || lower.includes("exchange") || lower.includes("convert")) {
     const pattern = /(\d+\.?\d*)\s*(eth|usdt|usdc)\s*(?:to|for)\s*(eth|usdt|usdc)/i;
     const match = lower.match(pattern);
-    
+
     return {
       content: `Analyzing market conditions...\n\nLiquidity is good, slippage is low. Good time to execute!\n\nI'm preparing to swap ${match?.[1] || "your"} ${match?.[2]?.toUpperCase() || "tokens"} to ${match?.[3]?.toUpperCase() || "the target token"}.`,
       action: {
@@ -86,13 +86,7 @@ const getAIResponse = (userMessage: string): { content: string; action?: Message
 };
 
 export const useNovaAI = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content: "Hey! I'm Nova, your AI wallet assistant. 👋\n\nI can help you send, receive, and swap tokens using simple commands. What would you like to do?",
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const sendMessage = useCallback(async (content: string) => {
@@ -123,13 +117,7 @@ export const useNovaAI = () => {
   }, []);
 
   const clearMessages = useCallback(() => {
-    setMessages([
-      {
-        id: "welcome",
-        role: "assistant",
-        content: "Hey! I'm Nova, your AI wallet assistant. 👋\n\nI can help you send, receive, and swap tokens using simple commands. What would you like to do?",
-      },
-    ]);
+    setMessages([]);
   }, []);
 
   return {

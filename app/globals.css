@@ -83,6 +83,56 @@
   --nova-message-ai: 240 10% 12%;
 }
 
+@layer utilities {
+
+  /** INITIAL CARDS BACKGROUNDS**/
+  .receive-bg {
+    background: radial-gradient(circle at 100% 0%, rgba(255, 184, 106, 0.4) 0%, rgba(253, 165, 213, 0.3) 30%, rgba(218, 178, 255, 0.2) 50%, transparent 70%);
+  }
+  .swap-bg {
+    background: radial-gradient(circle at 100% 0%, rgba(142, 197, 255, 0.3) 0%, rgba(218, 178, 255, 0.25) 30%, rgba(253, 165, 213, 0.2) 50%, transparent 70%);
+  }
+  .paylink-bg {
+    background: radial-gradient(circle at 100% 0%, rgba(218, 178, 255, 0.4) 0%, rgba(142, 197, 255, 0.3) 30%, rgba(83, 234, 253, 0.2) 50%, transparent 70%);
+  }
+  .send-bg {
+    background: radial-gradient(circle at 100% 0%, rgba(255, 223, 32, 0.4) 0%, rgba(255, 184, 106, 0.3) 30%, rgba(253, 165, 213, 0.2) 50%, transparent 70%);
+  }
+
+  /** INITIAL CARDS LOGOS **/
+  .receive-logo {
+    background: linear-gradient(135deg, #FFB86A 0%, #FDA5D5 50%, #DAB2FF 100%);
+  }
+  .swap-logo {
+    background: linear-gradient(135deg, #8EC5FF 0%, #DAB2FF 50%, #FDA5D5 100%);
+  }
+  .paylink-logo {
+    background: linear-gradient(135deg, #DAB2FF 0%, #8EC5FF 50%, #53EAFD 100%);
+  }
+  .send-logo {
+    background: linear-gradient(135deg, #FFB86A 0%, #FFDF20 50%, #FDA5D5 100%);
+  }
+
+  /** CHAT LOGO **/
+  .chat-logo {
+    background: linear-gradient(225.82deg, rgba(140, 132, 251, 0.4) 0%, rgba(54, 54, 201, 0.4) 98.6%),
+                linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1));
+    backdrop-filter: blur(8.68px);
+    border: 0.72px solid rgba(255, 255, 255, 0.2);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
+  }
+  .chat-logo-behind {
+    background: linear-gradient(135deg, #7069EC 0%, #5753DF 100%);
+    box-shadow: 0px 0px 2.89px 0px #8C84FB inset;
+    box-shadow: 0.72px 0.72px 5.42px 0px #FFFFFF33 inset;
+  }
+  .zap-style {
+    background: linear-gradient(180deg, #E9E2FE 0%, #A692FA 50%, #4937B2 100%);
+    border: 1.67px solid;
+    border-image-source: linear-gradient(180deg, #4937B2 0%, #A692FA 50%, #E9E2FE 100%);
+  }
+}
+
 * {
   border-color: hsl(var(--border));
 }

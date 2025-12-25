@@ -1,6 +1,6 @@
 "use client";
 
-import { useAccount, useBalance } from "wagmi";
+import { useAccount } from "wagmi";
 import { TrendingUp, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -82,7 +82,7 @@ export const TokenSidebar = ({ isOpen }: TokenSidebarProps) => {
                 className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted/50 transition-colors cursor-pointer"
               >
                 {/* Token Icon */}
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full bg-linear-to-br from-primary/20 to-primary/10 flex items-center justify-center">
                   <span className="text-sm font-bold text-primary">
                     {token.symbol.slice(0, 2)}
                   </span>
