@@ -1,26 +1,152 @@
 @import "tailwindcss";
 
+@theme {
+  --color-nova-purple: #b366ff;
+  --color-nova-purple-light: #d9b3ff;
+  --color-nova-purple-glow: #9933ff;
+  --color-nova-violet: #a366ff;
+  
+  --radius: 0.5rem;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: 0 0% 100%;
+  --foreground: 0 0% 3.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 3.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 3.9%;
+  --primary: 0 0% 9%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 0 0% 96.1%;
+  --secondary-foreground: 0 0% 9%;
+  --muted: 0 0% 96.1%;
+  --muted-foreground: 0 0% 45.1%;
+  --accent: 0 0% 96.1%;
+  --accent-foreground: 0 0% 9%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 89.8%;
+  --input: 0 0% 89.8%;
+  --ring: 0 0% 3.9%;
+  --sidebar-background: 0 0% 98%;
+  --sidebar-foreground: 0 0% 3.9%;
+  --sidebar-primary: 0 0% 9%;
+  --sidebar-primary-foreground: 0 0% 98%;
+  --sidebar-accent: 0 0% 96.1%;
+  --sidebar-accent-foreground: 0 0% 9%;
+  --sidebar-border: 0 0% 89.8%;
+  --sidebar-ring: 0 0% 3.9%;
+  --nova-purple: 270 100% 70%;
+  --nova-purple-light: 280 100% 85%;
+  --nova-purple-glow: 270 100% 60%;
+  --nova-violet: 260 100% 65%;
+  --nova-chat-bg: 0 0% 100%;
+  --nova-message-user: 270 100% 95%;
+  --nova-message-ai: 0 0% 96%;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+.dark {
+  --background: 0 0% 3.9%;
+  --foreground: 0 0% 98%;
+  --card: 0 0% 3.9%;
+  --card-foreground: 0 0% 98%;
+  --popover: 0 0% 3.9%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 0 0% 9%;
+  --secondary: 0 0% 14.9%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 0 0% 14.9%;
+  --muted-foreground: 0 0% 63.9%;
+  --accent: 0 0% 14.9%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 14.9%;
+  --input: 0 0% 14.9%;
+  --ring: 0 0% 83.1%;
+  --sidebar-background: 0 0% 3.9%;
+  --sidebar-foreground: 0 0% 98%;
+  --sidebar-primary: 0 0% 98%;
+  --sidebar-primary-foreground: 0 0% 9%;
+  --sidebar-accent: 0 0% 14.9%;
+  --sidebar-accent-foreground: 0 0% 98%;
+  --sidebar-border: 0 0% 14.9%;
+  --sidebar-ring: 0 0% 83.1%;
+  --nova-purple: 270 100% 70%;
+  --nova-purple-light: 280 100% 85%;
+  --nova-purple-glow: 270 100% 60%;
+  --nova-violet: 260 100% 65%;
+  --nova-chat-bg: 240 10% 8%;
+  --nova-message-user: 270 60% 15%;
+  --nova-message-ai: 240 10% 12%;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer utilities {
+
+  /** INITIAL CARDS BACKGROUNDS**/
+  .receive-bg {
+    background: radial-gradient(circle at 100% 0%, rgba(255, 184, 106, 0.4) 0%, rgba(253, 165, 213, 0.3) 30%, rgba(218, 178, 255, 0.2) 50%, transparent 70%);
+  }
+  .swap-bg {
+    background: radial-gradient(circle at 100% 0%, rgba(142, 197, 255, 0.3) 0%, rgba(218, 178, 255, 0.25) 30%, rgba(253, 165, 213, 0.2) 50%, transparent 70%);
+  }
+  .paylink-bg {
+    background: radial-gradient(circle at 100% 0%, rgba(218, 178, 255, 0.4) 0%, rgba(142, 197, 255, 0.3) 30%, rgba(83, 234, 253, 0.2) 50%, transparent 70%);
+  }
+  .send-bg {
+    background: radial-gradient(circle at 100% 0%, rgba(255, 223, 32, 0.4) 0%, rgba(255, 184, 106, 0.3) 30%, rgba(253, 165, 213, 0.2) 50%, transparent 70%);
+  }
+
+  /** INITIAL CARDS LOGOS **/
+  .receive-logo {
+    background: linear-gradient(135deg, #FFB86A 0%, #FDA5D5 50%, #DAB2FF 100%);
+  }
+  .swap-logo {
+    background: linear-gradient(135deg, #8EC5FF 0%, #DAB2FF 50%, #FDA5D5 100%);
+  }
+  .paylink-logo {
+    background: linear-gradient(135deg, #DAB2FF 0%, #8EC5FF 50%, #53EAFD 100%);
+  }
+  .send-logo {
+    background: linear-gradient(135deg, #FFB86A 0%, #FFDF20 50%, #FDA5D5 100%);
+  }
+
+  /** CHAT LOGO **/
+  .chat-logo {
+    background: linear-gradient(225.82deg, rgba(140, 132, 251, 0.4) 0%, rgba(54, 54, 201, 0.4) 98.6%),
+                linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1));
+    backdrop-filter: blur(8.68px);
+    border: 0.72px solid rgba(255, 255, 255, 0.2);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
+  }
+  .chat-logo-behind {
+    background: linear-gradient(135deg, #7069EC 0%, #5753DF 100%);
+    box-shadow: 0px 0px 2.89px 0px #8C84FB inset;
+    box-shadow: 0.72px 0.72px 5.42px 0px #FFFFFF33 inset;
+  }
+  .zap-style {
+    background: linear-gradient(180deg, #E9E2FE 0%, #A692FA 50%, #4937B2 100%);
+    border: 1.67px solid;
+    border-image-source: linear-gradient(180deg, #4937B2 0%, #A692FA 50%, #E9E2FE 100%);
+  }
+
+  /** BUBBLE CHAT **/
+  .bubble-chat {
+   background: linear-gradient(180deg, #7768CA 0%, #5341B8 100%);
+   box-shadow: 0px 1px 3px 0px #0000001A;
+   box-shadow: 0px -1px 0px 0px #3E318A inset;
+   box-shadow: 0px 1px 0.75px 0px #FFFFFF1F inset;
+   box-shadow: 0px 0px 0px 1px #423493;
   }
 }
 
+* {
+  border-color: hsl(var(--border));
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
 }
