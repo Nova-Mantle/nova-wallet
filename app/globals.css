@@ -131,6 +131,15 @@
     border: 1.67px solid;
     border-image-source: linear-gradient(180deg, #4937B2 0%, #A692FA 50%, #E9E2FE 100%);
   }
+
+  /** BUBBLE CHAT **/
+  .bubble-chat {
+   background: linear-gradient(180deg, #7768CA 0%, #5341B8 100%);
+   box-shadow: 0px 1px 3px 0px #0000001A;
+   box-shadow: 0px -1px 0px 0px #3E318A inset;
+   box-shadow: 0px 1px 0.75px 0px #FFFFFF1F inset;
+   box-shadow: 0px 0px 0px 1px #423493;
+  }
 }
 
 * {

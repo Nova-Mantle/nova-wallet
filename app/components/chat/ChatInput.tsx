@@ -1,16 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
   disabled?: boolean;
+  initialValue?: string;
 }
 
-export const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
-  const [message, setMessage] = useState("");
+export const ChatInput = ({ onSend, disabled, initialValue = "" }: ChatInputProps) => {
+  const [message, setMessage] = useState(initialValue);
+
+  useEffect(() => {
+    setMessage(initialValue);
+  }, [initialValue]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

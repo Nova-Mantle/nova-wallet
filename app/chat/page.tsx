@@ -9,7 +9,7 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { TokenSidebar } from "@/components/chat/TokenSidebar";
 import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { TransactionCard } from "@/components/chat/TransactionCard";
-import { useNovaAI, Message } from "@/hooks/useNovaAI";
+import { useNovaAI } from "@/hooks/useNovaAI";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Wallet } from "lucide-react";
@@ -20,6 +20,7 @@ export default function ChatPage() {
     const { openConnectModal } = useConnectModal();
     const { messages, isLoading, sendMessage } = useNovaAI();
     const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [inputValue, setInputValue] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const pendingTransaction = (() => {
@@ -43,17 +44,18 @@ export default function ChatPage() {
             return;
         }
         sendMessage(content);
+        setInputValue(""); // Clear input after sending
     };
 
     const handleActionClick = (action: "send" | "receive" | "swap" | "paylink") => {
         if (action === "send") {
-            sendMessage("I want to send crypto");
+            setInputValue("I want to send crypto");
         } else if (action === "receive") {
-            sendMessage("Show me my receive address");
+            setInputValue("Show me my receive address");
         } else if (action === "swap") {
-            sendMessage("I want to swap tokens");
-        } else {
-            toast.info("Paylink feature coming soon!");
+            setInputValue("I want to swap tokens");
+        } else if (action === "paylink") {
+            setInputValue("I want to create a paylink");
         }
     };
 
@@ -169,7 +171,7 @@ export default function ChatPage() {
                         </ScrollArea>
                     )}
 
-                    <ChatInput onSend={handleSendMessage} disabled={isLoading} />
+                    <ChatInput onSend={handleSendMessage} disabled={isLoading} initialValue={inputValue} />
                 </main>
             </div>
         </div>

@@ -14,7 +14,7 @@ export const WelcomeScreen = ({ onActionClick }: WelcomeScreenProps) => {
       title: "Receive",
       description: "Get your wallet address to receive crypto",
       gradient: "receive-bg feature-bg-blur",
-      iconBg: "bg-gradient-to-br from-pink-400 to-pink-500",
+      iconBg: "receive-logo",
       textColor: "text-pink-500",
     },
     {
@@ -23,7 +23,7 @@ export const WelcomeScreen = ({ onActionClick }: WelcomeScreenProps) => {
       title: "Swap",
       description: "Exchange one token for another instantly",
       gradient: "swap-bg",
-      iconBg: "bg-gradient-to-br from-purple-400 to-purple-500",
+      iconBg: "swap-logo",
       textColor: "text-purple-500",
     },
     {
@@ -32,7 +32,7 @@ export const WelcomeScreen = ({ onActionClick }: WelcomeScreenProps) => {
       title: "Paylink",
       description: "Create a payment link for quick & secure transfers",
       gradient: "paylink-bg",
-      iconBg: "bg-gradient-to-br from-blue-400 to-blue-500",
+      iconBg: "paylink-logo",
       textColor: "text-blue-500",
     },
     {
@@ -49,8 +49,11 @@ export const WelcomeScreen = ({ onActionClick }: WelcomeScreenProps) => {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
       {/* Nova AI Logo */}
-      <div className="mb-8">
-        <div className="w-24 h-24 rounded-3xl chat-logo flex items-center justify-center shadow-2xl shadow-purple-500/30">
+      <div className="mb-8 relative w-24 h-24">
+        {/* Behind box - rotated left */}
+        <div className="absolute w-24 h-24 rounded-3xl chat-logo-behind -rotate-20 -top-3 -left-5" />
+        {/* Front box */}
+        <div className="absolute top-0 left-0 w-24 h-24 rounded-3xl chat-logo flex items-center justify-center shadow-2xl shadow-purple-500/30">
           <Zap className="w-12 h-12 text-white fill-white" />
         </div>
       </div>

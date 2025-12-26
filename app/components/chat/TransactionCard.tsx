@@ -1,6 +1,10 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { QRCodeSVG } from "qrcode.react";
+import { Copy, Check } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 
 interface SendTransactionCardProps {
   type: "send";
@@ -40,6 +44,19 @@ interface SwapTransactionCardProps {
 type TransactionCardProps = SendTransactionCardProps | ReceiveTransactionCardProps | SwapTransactionCardProps;
 
 export const TransactionCard = (props: TransactionCardProps) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (address: string) => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      toast.success("Address copied to clipboard!");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Failed to copy address");
+    }
+  };
+
   if (props.type === "send") {
     return (
       <div className="bg-card rounded-2xl border border-border p-6 max-w-sm mt-3">
@@ -60,7 +77,9 @@ export const TransactionCard = (props: TransactionCardProps) => {
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Recipient Address</span>
-            <span className="font-medium">{props.data.recipient}</span>
+            <span className="font-medium font-mono text-xs">
+              {props.data.recipient.slice(0, 6)}...{props.data.recipient.slice(-4)}
+            </span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Gas Fee</span>
@@ -77,7 +96,7 @@ export const TransactionCard = (props: TransactionCardProps) => {
             Cancel
           </Button>
           <Button
-            className="flex-1 nova-gradient"
+            className="flex-1 nova-gradient bubble-chat"
             onClick={props.onConfirm}
           >
             Send Confirm
@@ -97,17 +116,45 @@ export const TransactionCard = (props: TransactionCardProps) => {
         <h3 className="text-lg font-semibold text-center mb-6">Receive {props.data.token}</h3>
 
         <div className="flex flex-col items-center">
-          <div className="w-40 h-40 bg-white rounded-xl flex items-center justify-center mb-4">
-            <div className="text-xs text-muted-foreground">QR Code</div>
+          {/* QR Code */}
+          <div className="w-48 h-48 bg-white rounded-xl flex items-center justify-center mb-4 p-4">
+            <QRCodeSVG
+              value={props.data.address}
+              size={176}
+              level="H"
+              includeMargin={false}
+            />
           </div>
-          <p className="text-sm font-mono text-center break-all">
-            {props.data.address}
-          </p>
+
+          {/* Address with copy button */}
+          <div className="w-full bg-muted rounded-lg p-3 mb-4">
+            <p className="text-xs font-mono text-center break-all mb-2">
+              {props.data.address}
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full"
+              onClick={() => handleCopy(props.data.address)}
+            >
+              {copied ? (
+                <>
+                  <Check className="w-4 h-4 mr-2" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4 mr-2" />
+                  Copy Address
+                </>
+              )}
+            </Button>
+          </div>
         </div>
 
         <Button
           variant="outline"
-          className="w-full mt-4"
+          className="w-full"
           onClick={props.onClose}
         >
           Close
@@ -145,7 +192,7 @@ export const TransactionCard = (props: TransactionCardProps) => {
             Cancel
           </Button>
           <Button
-            className="flex-1 nova-gradient"
+            className="flex-1  bubble-chat"
             onClick={props.onConfirm}
           >
             Confirm Swap

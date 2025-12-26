@@ -15,25 +15,27 @@ export const ChatMessage = ({ role, content, isLoading }: ChatMessageProps) => {
   return (
     <div className={cn("flex gap-4 mb-6", isUser ? "flex-row-reverse" : "flex-row")}>
       {/* Avatar */}
-      <div
-        className={cn(
-          "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0",
-          isUser ? "bg-muted" : "nova-gradient"
-        )}
-      >
-        {isUser ? (
+      {isUser ? (
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-muted">
           <User className="w-5 h-5 text-muted-foreground" />
-        ) : (
-          <Zap className="w-5 h-5 text-primary-foreground" />
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="relative w-10 h-10 shrink-0">
+          {/* Behind box - rotated left */}
+          <div className="absolute top-0 -left-1 w-10 h-10 rounded-xl chat-logo-behind -rotate-12" />
+          {/* Front box */}
+          <div className="absolute top-0 left-0 w-10 h-10 rounded-xl chat-logo flex items-center justify-center">
+            <Zap className="w-5 h-5 text-white fill-white" />
+          </div>
+        </div>
+      )}
 
       {/* Message bubble */}
       <div
         className={cn(
           "max-w-[70%] rounded-2xl px-5 py-4",
           isUser
-            ? "bg-primary text-primary-foreground rounded-tr-md"
+            ? "bubble-chat text-white rounded-tr-md"
             : "bg-card border border-border rounded-tl-md shadow-sm"
         )}
       >
