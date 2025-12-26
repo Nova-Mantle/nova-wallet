@@ -79,9 +79,16 @@ const getAIResponse = (userMessage: string): { content: string; action?: Message
     };
   }
 
+  // Paylink command
+  if (lower.includes("paylink") || lower.includes("payment link")) {
+    return {
+      content: "Great! I'll help you create a payment link.\n\nPayment links allow you to:\n• Request specific amounts\n• Share via QR code or URL\n• Track payment status\n• Set expiration dates\n\nLet me know the details: amount, token, and optional message!",
+    };
+  }
+
   // Default response
   return {
-    content: "I'm Nova, your AI wallet assistant! I can help you with:\n\n• **Send tokens**: \"Send 0.1 ETH to 0x...\"\n• **Receive tokens**: \"Give me an address to receive ETH\"\n• **Swap tokens**: \"Swap 10 ETH to USDT\"\n• **Check balance**: \"Show my portfolio\"\n• **Gas prices**: \"What's the gas fee?\"\n\nHow can I help you today?",
+    content: "I'm Nova, your AI wallet assistant! I can help you with:\n\n• **Send tokens**: \"Send 0.1 ETH to 0x...\"\n• **Receive tokens**: \"Give me an address to receive ETH\"\n• **Swap tokens**: \"Swap 10 ETH to USDT\"\n• **Create paylink**: \"I want to create a paylink\"\n• **Check balance**: \"Show my portfolio\"\n• **Gas prices**: \"What's the gas fee?\"\n\nHow can I help you today?",
   };
 };
 
