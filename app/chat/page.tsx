@@ -10,48 +10,91 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { TokenSidebar } from "@/components/chat/TokenSidebar";
 import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { TransactionCard } from "@/components/chat/TransactionCard";
-import { useNovaAI } from "@/hooks/useNovaAI";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Wallet } from "lucide-react";
 import { toast } from "sonner";
 
+// CopilotKit Imports
+import { CopilotKit, useCopilotAction, useCopilotChat } from "@copilotkit/react-core";
+import { Message, Role } from "@copilotkit/runtime-client-gql";
+
 export default function ChatPage() {
+    return (
+        <CopilotKit runtimeUrl="/api/copilotkit">
+            <ChatPageContent />
+        </CopilotKit>
+    );
+}
+
+function ChatPageContent() {
     const { isConnected, address } = useAccount();
     const { openConnectModal } = useConnectModal();
-    const { messages, isLoading, sendMessage } = useNovaAI();
-    const { sendTransaction, isPending: isTxPending } = useSendTransaction();
+    const { sendTransaction } = useSendTransaction();
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [inputValue, setInputValue] = useState("");
     const [isMounted, setIsMounted] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
+    // CopilotKit Hooks
+    const { visibleMessages, appendMessage, isLoading } = useCopilotChat({
+
+    });
+
+    // Local state for transaction card (Generative UI logic)
+    const [pendingTransaction, setPendingTransaction] = useState<{
+        type: "send" | "receive" | "swap" | "paylink";
+        data: any;
+    } | null>(null);
+
+    // Register Actions
+    useCopilotAction({
+        name: "prepareTransaction",
+        description: "Prepare a cryptocurrency transaction for the user to sign. Use this when the user wants to send money. ALWAYS return a JSON with { recipient, amount, token }.",
+        parameters: [
+            { name: "recipient", type: "string", description: "The recipient wallet address (0x...)" },
+            { name: "amount", type: "string", description: "The amount of ETH/tokens to send" },
+            { name: "token", type: "string", description: "The token symbol (e.g., ETH, MNT)", required: false },
+        ],
+        handler: async ({ recipient, amount, token }) => {
+            setPendingTransaction({
+                type: "send",
+                data: { recipient, amount, token }
+            });
+            return "Transaction card displayed to user.";
+        },
+    });
+
+    useCopilotAction({
+        name: "showReceiveAddress",
+        description: "Show the user's receive address QR code.",
+        handler: async () => {
+            setPendingTransaction({
+                type: "receive",
+                data: { token: "ETH" }
+            });
+            return "Receive address card displayed.";
+        }
+    });
+
     useEffect(() => {
         setIsMounted(true);
     }, []);
 
-    const pendingTransaction = (() => {
-        const lastMessage = messages[messages.length - 1];
-        if (lastMessage?.action && lastMessage.role === "assistant") {
-            return {
-                type: lastMessage.action.type as "send" | "receive" | "swap",
-                data: lastMessage.action.data || {},
-            };
-        }
-        return null;
-    })();
-
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+    }, [visibleMessages]);
 
     const handleSendMessage = (content: string) => {
         if (!isConnected) {
             toast.error("Please connect your wallet first");
             return;
         }
-        sendMessage(content);
-        setInputValue(""); // Clear input after sending
+        appendMessage(new Message({
+            content,
+            role: Role.User
+        }));
+        setInputValue("");
     };
 
     const handleActionClick = (action: "send" | "receive" | "swap" | "paylink") => {
@@ -67,7 +110,12 @@ export default function ChatPage() {
     };
 
     const handleTransactionCancel = () => {
+        setPendingTransaction(null);
         toast.info("Transaction cancelled");
+        appendMessage(new Message({
+            content: "Transaction cancelled.",
+            role: Role.System
+        }));
     };
 
     const handleTransactionConfirm = () => {
@@ -88,7 +136,11 @@ export default function ChatPage() {
                     toast.success("Transaction submitted!", {
                         description: `Hash: ${hash.slice(0, 10)}...${hash.slice(-8)}`
                     });
-                    // Optional: tell AI about success
+                    setPendingTransaction(null);
+                    appendMessage(new Message({
+                        content: `Transaction submitted! Hash: ${hash}`,
+                        role: Role.System
+                    }));
                 },
                 onError: (error) => {
                     toast.error("Transaction failed", {
@@ -126,7 +178,7 @@ export default function ChatPage() {
         );
     }
 
-    const hasMessages = messages.length > 0;
+    const hasMessages = visibleMessages && visibleMessages.length > 0;
 
     return (
         <div className="h-screen flex flex-col bg-background">
@@ -150,55 +202,42 @@ export default function ChatPage() {
                             </div>
 
                             <div className="max-w-3xl mx-auto">
-                                {messages.map((message, index) => (
+                                {visibleMessages.map((message, index) => (
                                     <div key={message.id}>
-                                        <ChatMessage role={message.role} content={message.content} />
+                                        <ChatMessage
+                                            role={(message as any).role === Role.User ? "user" : "assistant"}
+                                            content={(message as any).content}
+                                        />
 
-                                        {message.role === "assistant" &&
-                                            message.action &&
-                                            index === messages.length - 1 &&
-                                            pendingTransaction && (
-                                                <div className="flex justify-start pl-14">
-                                                    {pendingTransaction.type === "send" && (
-                                                        <TransactionCard
-                                                            type="send"
-                                                            data={{
-                                                                token: pendingTransaction.data.token || "ETH",
-                                                                amount: pendingTransaction.data.amount || "0.1",
-                                                                network: "Ethereum",
-                                                                recipient: pendingTransaction.data.recipient || "0xABC...789",
-                                                                gasFee: "$0.02",
-                                                            }}
-                                                            onCancel={handleTransactionCancel}
-                                                            onConfirm={handleTransactionConfirm}
-                                                        />
-                                                    )}
-                                                    {pendingTransaction.type === "receive" && (
-                                                        <TransactionCard
-                                                            type="receive"
-                                                            data={{
-                                                                address: address || "0x...",
-                                                                token: pendingTransaction.data.token || "ETH",
-                                                            }}
-                                                            onClose={handleTransactionCancel}
-                                                        />
-                                                    )}
-                                                    {pendingTransaction.type === "swap" && (
-                                                        <TransactionCard
-                                                            type="swap"
-                                                            data={{
-                                                                fromToken: pendingTransaction.data.fromToken || "ETH",
-                                                                fromAmount: pendingTransaction.data.amount || "1",
-                                                                toToken: pendingTransaction.data.toToken || "USDT",
-                                                                toAmount: "1850.00",
-                                                                rate: "1 ETH = 1850 USDT",
-                                                            }}
-                                                            onCancel={handleTransactionCancel}
-                                                            onConfirm={handleTransactionConfirm}
-                                                        />
-                                                    )}
-                                                </div>
-                                            )}
+                                        {/* Render Transaction Card ONLY if it's the latest message AND we have a pending txn */}
+                                        {index === visibleMessages.length - 1 && pendingTransaction && (
+                                            <div className="flex justify-start pl-14">
+                                                {pendingTransaction.type === "send" && (
+                                                    <TransactionCard
+                                                        type="send"
+                                                        data={{
+                                                            token: pendingTransaction.data.token || "ETH",
+                                                            amount: pendingTransaction.data.amount || "0",
+                                                            network: "Mantle Testnet",
+                                                            recipient: pendingTransaction.data.recipient || "0x...",
+                                                            gasFee: "< 0.01 MNT",
+                                                        }}
+                                                        onCancel={handleTransactionCancel}
+                                                        onConfirm={handleTransactionConfirm}
+                                                    />
+                                                )}
+                                                {pendingTransaction.type === "receive" && (
+                                                    <TransactionCard
+                                                        type="receive"
+                                                        data={{
+                                                            address: address || "0x...",
+                                                            token: pendingTransaction.data.token || "ETH",
+                                                        }}
+                                                        onClose={handleTransactionCancel}
+                                                    />
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                                 {isLoading && <ChatMessage role="assistant" content="" isLoading />}

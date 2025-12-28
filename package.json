@@ -9,6 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@copilotkit/react-core": "^1.50.1",
+    "@copilotkit/react-ui": "^1.50.1",
+    "@copilotkit/runtime": "^1.50.1",
+    "@copilotkit/runtime-client-gql": "^1.50.1",
     "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.11",
