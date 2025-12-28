@@ -10,7 +10,6 @@ import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { TransactionCard } from "@/components/chat/TransactionCard";
 import { InfoCard } from "@/components/chat/InfoCard";
 import { CustomUserMessage } from "@/components/chat/CustomUserMessage";
-import { CustomAIMessage } from "@/components/chat/CustomAIMessage";
 import { CustomChatInput } from "@/components/chat/CustomChatInput";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -279,7 +278,6 @@ function ChatPageContent() {
                                 placeholder: "Tanya Nova AI tentang wallet atau crypto...",
                             }}
                             UserMessage={CustomUserMessage}
-                            AssistantMessage={CustomAIMessage}
                             Input={CustomChatInput}
                             instructions={`Kamu adalah Nova AI, asisten crypto wallet yang ramah dan helpful. Selalu gunakan Bahasa Indonesia.
 
