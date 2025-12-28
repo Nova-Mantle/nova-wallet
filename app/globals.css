@@ -187,7 +187,9 @@ body {
 /* CRITICAL: Make chat container fill available space with proper constraints */
 .copilotKitChat,
 [class*="copilotKit"][class*="Chat"],
-main>div[class*="copilot"] {
+[data-copilotkit-chat],
+main>div>div[class*="copilot"],
+main div[class*="Chat"] {
   height: 100% !important;
   max-height: 100% !important;
   min-height: 0 !important;
@@ -196,18 +198,55 @@ main>div[class*="copilot"] {
   border: none !important;
   border-radius: 0 !important;
   overflow: hidden !important;
+  flex: 1 1 0% !important;
 }
 
 /* CRITICAL: Messages area must scroll and not grow infinitely */
 .copilotKitMessages,
 [class*="copilotKit"][class*="Messages"],
 [class*="copilot"] [class*="messages"],
-[class*="copilot"] [class*="Messages"] {
+[class*="copilot"] [class*="Messages"],
+[data-copilotkit-messages] {
   flex: 1 1 0% !important;
   min-height: 0 !important;
+  max-height: none !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
   padding: 1rem !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* FIX: MessagesContainer must fill ALL parent height */
+.copilotKitMessagesContainer,
+[class*="copilotKitMessagesContainer"],
+div.copilotKitMessagesContainer {
+  flex: 1 1 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  max-height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+/* FIX: COMPLETELY remove footer from layout flow */
+.copilotKitMessagesFooter,
+[class*="copilotKitMessagesFooter"],
+footer.copilotKitMessagesFooter,
+div.copilotKitMessages>footer,
+[class*="copilotKitMessages"]>footer {
+  display: none !important;
+  visibility: hidden !important;
+  position: absolute !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* Style user messages with Nova gradient */
