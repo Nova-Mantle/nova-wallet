@@ -59,6 +59,7 @@ function ChatPageContent() {
             { name: "chainId", type: "number", description: "The chain ID to check balance on (e.g., 5000 for Mantle Mainnet, 5003 for Mantle Sepolia)", required: false },
         ],
         handler: async ({ chainId: targetChainId }) => {
+            console.log("🔥 checkBalance action called!", { targetChainId }); // DEBUG
             if (!isConnected || !address) {
                 return "User wallet is not connected. Please ask the user to connect their wallet first.";
             }
@@ -112,17 +113,21 @@ function ChatPageContent() {
         },
     });
 
-    // State for multi-chain balances
-    const [multiChainBalances, setMultiChainBalances] = useState<{
+    // Ref for multi-chain balances (synchronous access in render)
+    const multiChainBalancesRef = useRef<{
         chainName: string;
         balance: string;
         symbol: string;
     }[] | null>(null);
 
+    // State to trigger re-render after data is set
+    const [, forceUpdate] = useState(0);
+
     useCopilotAction({
         name: "checkAllBalances",
         description: "Cek saldo wallet user di SEMUA chain yang tersedia sekaligus. Gunakan ini ketika user mau lihat semua saldo, cek portfolio, atau lihat balance di setiap chain.",
         handler: async () => {
+            console.log("🔥 checkAllBalances action called!"); // DEBUG
             if (!isConnected || !address) {
                 return "User wallet is not connected. Please ask the user to connect their wallet first.";
             }
@@ -154,12 +159,16 @@ function ChatPageContent() {
                 const results = await Promise.all(balancePromises);
                 const validBalances = results.filter((b): b is NonNullable<typeof b> => b !== null);
 
-                setMultiChainBalances(validBalances);
+                console.log("🔥 checkAllBalances results:", validBalances); // DEBUG
+                multiChainBalancesRef.current = validBalances;
+                forceUpdate(n => n + 1); // Trigger re-render
+                console.log("🔥 multiChainBalances ref set to:", validBalances.length, "chains"); // DEBUG
 
                 const nonZero = validBalances.filter(b => parseFloat(b.balance) > 0);
                 return `Berhasil mengambil saldo dari ${validBalances.length} chains. ${nonZero.length} chains memiliki saldo > 0. Lihat card portfolio di atas.`;
             } catch (error: any) {
-                setMultiChainBalances(null);
+                console.log("🔥 checkAllBalances error:", error); // DEBUG
+                multiChainBalancesRef.current = null;
                 return `Error: ${error.message}`;
             }
         },
@@ -189,10 +198,11 @@ function ChatPageContent() {
                     </div>
                 );
             }
-            if (status === "complete" && multiChainBalances && address) {
+            if (status === "complete" && multiChainBalancesRef.current && address) {
+                console.log("🔥 Rendering MultiChainBalanceCard with:", multiChainBalancesRef.current); // DEBUG
                 return (
                     <MultiChainBalanceCard
-                        balances={multiChainBalances}
+                        balances={multiChainBalancesRef.current}
                         address={address}
                     />
                 );
@@ -308,10 +318,10 @@ function ChatPageContent() {
         },
     });
 
-    // Generative UI: Display information in card format
+    // Generative UI: Display information in card format (NOT for balance!)
     useCopilotAction({
         name: "displayInfoCard",
-        description: "Tampilkan informasi dalam format card yang menarik. Gunakan ini untuk menampilkan informasi balance, status transaksi, atau penjelasan crypto.",
+        description: "Tampilkan informasi umum dalam format card. JANGAN gunakan untuk menampilkan saldo/balance - gunakan checkBalance atau checkAllBalances untuk itu. Gunakan displayInfoCard hanya untuk: tips crypto, penjelasan blockchain, status transaksi, atau informasi edukasi.",
         parameters: [
             { name: "title", type: "string", description: "Judul card" },
             { name: "content", type: "string", description: "Konten utama card (opsional)", required: false },
@@ -329,6 +339,13 @@ function ChatPageContent() {
             },
         ],
         render: ({ status, args }) => {
+            // BLOCK: Don't render anything balance/saldo related
+            const blockedKeywords = ['saldo', 'balance', 'portfolio', 'chain 1', 'chain 2', 'eth', 'btc', 'bnb'];
+            const titleLower = (args.title || '').toLowerCase();
+            if (blockedKeywords.some(kw => titleLower.includes(kw))) {
+                return <></>;  // Don't render fake balance cards
+            }
+
             if (status === "complete" && args.title) {
                 return (
                     <InfoCard
@@ -342,6 +359,15 @@ function ChatPageContent() {
             return <></>;
         },
         handler: async ({ title }) => {
+            console.log("🔥 displayInfoCard action called!", { title }); // DEBUG
+
+            // BLOCK: Reject balance-related requests
+            const blockedKeywords = ['saldo', 'balance', 'portfolio'];
+            const titleLower = (title || '').toLowerCase();
+            if (blockedKeywords.some(kw => titleLower.includes(kw))) {
+                return "ERROR: Jangan gunakan displayInfoCard untuk balance/saldo. Gunakan checkBalance atau checkAllBalances.";
+            }
+
             return `Informasi "${title}" berhasil ditampilkan dalam format card.`;
         },
     });
@@ -406,29 +432,25 @@ function ChatPageContent() {
                             instructions={`Kamu adalah Nova AI, asisten crypto wallet yang ramah dan helpful. Selalu gunakan Bahasa Indonesia.
 
 TOOLS YANG TERSEDIA:
-1. checkBalance - Untuk cek saldo wallet user
-2. prepareTransaction - Untuk menyiapkan transaksi kirim crypto
-3. showReceiveAddress - Untuk menampilkan alamat wallet user
-4. displayInfoCard - Untuk menampilkan informasi dalam format card yang menarik
+1. checkBalance - Cek saldo di SATU chain tertentu
+2. checkAllBalances - Cek saldo di SEMUA chain sekaligus (7 chains). WAJIB gunakan ini jika user minta lihat semua saldo atau portfolio
+3. prepareTransaction - Menyiapkan transaksi kirim crypto
+4. showReceiveAddress - Menampilkan alamat wallet dengan QR code
+5. displayInfoCard - HANYA untuk tips, penjelasan, dan edukasi. JANGAN untuk balance!
 
-ATURAN PENGGUNAAN displayInfoCard:
-- Gunakan untuk menampilkan informasi penting dalam format visual yang menarik
-- title: Judul card (wajib)
-- content: Deskripsi atau penjelasan (opsional)
-- items: Array objek {label, value} untuk data terstruktur (opsional)
-- type: "info" (biru), "success" (hijau), "warning" (kuning), "error" (merah)
+ATURAN PENTING - WAJIB DIIKUTI:
+1. JANGAN PERNAH memfabrikasi atau mengarang data saldo. Selalu panggil checkBalance atau checkAllBalances untuk mendapat data real
+2. Jika user tanya "cek saldo", "berapa balance ku", "lihat portfolio", dll - WAJIB panggil checkBalance atau checkAllBalances
+3. JANGAN gunakan displayInfoCard untuk menampilkan saldo - data akan salah!
+4. Chain yang tersedia: Ethereum Sepolia, Mantle Sepolia, Base Sepolia, Optimism Sepolia, Lisk Sepolia, Polygon Amoy, Arbitrum Sepolia
+5. TIDAK ada Bitcoin (BTC) - kita hanya support EVM chains
 
-CONTOH PENGGUNAAN:
-- Setelah cek saldo, tampilkan hasilnya dengan displayInfoCard type "success"
-- Untuk peringatan, gunakan type "warning"
-- Untuk error, gunakan type "error"
+CONTOH:
+- "cek saldom" → panggil checkBalance
+- "lihat semua saldo di setiap chain" → panggil checkAllBalances
+- "apa itu blockchain?" → gunakan displayInfoCard untuk penjelasan
 
-PENTING:
-- Selalu gunakan Bahasa Indonesia dalam respons
-- Jangan execute transaksi tanpa konfirmasi user
-- Berikan penjelasan yang mudah dipahami
-
-Wallet user terhubung: ${address} pada chain ID: ${chainId}`}
+Wallet user: ${address} | Chain ID: ${chainId}`}
                         />
                     </div>
                 </main>
