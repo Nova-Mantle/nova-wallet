@@ -223,7 +223,7 @@ export const TokenSidebar = ({ isOpen }: TokenSidebarProps) => {
                       alt={token.symbol}
                       width={40}
                       height={40}
-                      className="object-contain"
+                      className="object-contain h-8 w-8"
                     />
                   ) : (
                     <span className="text-sm font-bold text-gray-600">
