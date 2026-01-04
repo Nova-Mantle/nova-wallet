@@ -278,9 +278,13 @@ export class PortfolioAggregator {
 
         // Only include if there's a non-zero balance AND (has value OR is in top 20)
         if (holding.balance > 0.000001) {
-          // If we didn't price it, only show if balance is substantial
-          if (!shouldPrice && holding.balance < 1.0) {
-            continue; // Skip dust tokens that weren't priced
+          // ✅ Skip tokens with $0 value that weren't in top 20
+          if (!shouldPrice && holding.currentValueUSD === 0) {
+            continue; // Skip unpriced dust tokens
+          }
+          // ✅ Also skip tokens with very small USD value (< $0.01)
+          if (holding.currentValueUSD < 0.01 && holding.currentValueUSD > 0) {
+            continue; // Skip near-worthless tokens
           }
           holdings.push(holding);
         }
@@ -306,11 +310,29 @@ export class PortfolioAggregator {
     currentTimestamp: number,
     shouldPrice: boolean = true // ✅ NEW: Flag to control pricing
   ): Promise<PortfolioHolding> {
-    const tokenInfo = await this.client.getTokenMetadata(tokenAddress);
+    // ✅ OPTIMIZATION: Get token info from first transaction to avoid metadata call
+    const firstTx = transactions[0];
+    const tokenSymbolFromTx = firstTx?.tokenSymbol || 'UNKNOWN';
+    const tokenDecimalFromTx = firstTx?.tokenDecimal ? parseInt(firstTx.tokenDecimal) : 18;
+    
+    // Only fetch full metadata if we're pricing this token (top 20)
+    let tokenInfo;
+    if (shouldPrice) {
+      tokenInfo = await this.client.getTokenMetadata(tokenAddress);
+    } else {
+      // Use transaction data to avoid API call
+      tokenInfo = {
+        symbol: tokenSymbolFromTx,
+        decimals: tokenDecimalFromTx,
+        address: tokenAddress
+      };
+    }
 
     // Detect actual decimals from first transaction
-    const sampleValue = transactions[0]?.value || '0';
-    const actualDecimals = await this.getActualDecimals(tokenAddress, sampleValue);
+    const sampleValue = firstTx?.value || '0';
+    const actualDecimals = shouldPrice 
+      ? await this.getActualDecimals(tokenAddress, sampleValue)
+      : tokenDecimalFromTx;
 
     let balance = 0;
     let totalInvestedUSD = 0;

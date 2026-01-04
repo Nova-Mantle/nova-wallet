@@ -517,7 +517,8 @@ function ChatPageContent() {
 
                     // Format response for AI
                     let response = `✅ Portfolio Analysis Complete (${result.chain}):\n\n`;
-                    response += `💰 Native Balance: ${portfolio.nativeBalance.toFixed(4)} ${result.chain.includes('ETH') ? 'ETH' : result.chain.includes('Mantle') ? 'MNT' : 'LSK'}\n`;
+                    const nativeTokenSymbol = result.metadata?.nativeToken || 'ETH';
+                    response += `💰 Native Balance: ${portfolio.nativeBalance.toFixed(4)} ${nativeTokenSymbol}\n`;
                     response += `💵 Native Value: $${portfolio.nativeValueUSD.toFixed(2)}\n\n`;
 
                     if (portfolio.numTokens > 0) {

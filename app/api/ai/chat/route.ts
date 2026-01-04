@@ -8,10 +8,10 @@ import { isAddress as viemIsAddress } from "viem";
 import { supportedChains } from "../../../config/chains";
 
 // NEW: Import blockchain analysis functions
-import { 
-    getPortfolioAnalysis, 
-    getTokenActivity, 
-    getTransactionStats 
+import {
+    getPortfolioAnalysis,
+    getTokenActivity,
+    getTransactionStats
 } from "@/lib/blockchainAgentWrapper";
 
 // Function untuk check balance (UNCHANGED)
@@ -324,6 +324,12 @@ export async function POST(request: Request) {
 
         body = (await request.json()) as ChatRequestBody;
 
+        // ✅ ADD THIS DEBUG AT THE TOP
+        console.log("\n🔥 AI CHAT ROUTE CALLED");
+        console.log("  Last message:", body.messages[body.messages.length - 1]?.content.substring(0, 100));
+        console.log("  Wallet connected:", body.walletContext?.isConnected);
+        console.log("  Chain ID:", body.walletContext?.chainId);
+
         if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
             return NextResponse.json(
                 { error: "Messages wajib berupa array yang tidak kosong." },
@@ -460,10 +466,34 @@ Tunggu system memberikan hasil eksekusi tool tersebut sebelum menjawab final.
                 } else {
                     try {
                         const result = await getPortfolioAnalysis(args.address ?? body.walletContext.address, args.chainId ?? resolvedChainId);
-                        const followUpContent = `System: Portfolio analysis complete. Result: ${JSON.stringify(result.data)}. Explain to user in Bahasa Indonesia.`;
+
+                        const nativeTokenSymbol = result.metadata?.nativeToken || 'ETH';
+                        const chainName = result.chain || 'Unknown';
+
+                        const followUpContent = `System: Portfolio analysis complete for ${chainName}.
+
+CRITICAL: Native token symbol is "${nativeTokenSymbol}". When you display native balance, you MUST write "${nativeTokenSymbol}", NOT "LSK" or "MNT" or anything else.
+
+Data: ${JSON.stringify(result.data)}
+
+Format response in Bahasa Indonesia. Native token = ${nativeTokenSymbol}.`;
+
+                        // ✅ DEBUG: Log what we're sending to AI
+                        console.log("\n🤖 SENDING TO AI:");
+                        console.log("Chain:", chainName);
+                        console.log("Native Token:", nativeTokenSymbol);
+                        console.log("Follow-up content preview:", followUpContent.substring(0, 200) + "...");
+
                         augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
                         augmentedMessages.push({ role: "user", content: followUpContent });
                         geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
+
+                        // ✅ DEBUG: Log AI's raw response
+                        const aiResponseText = geminiResponse.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("") || "";
+                        console.log("\n🤖 AI RAW RESPONSE:");
+                        console.log(aiResponseText.substring(0, 500));
+                        console.log("---\n");
+
                     } catch (error: any) {
                         const followUpContent = `System: Portfolio analysis failed: ${error.message}. Explain to user.`;
                         augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
@@ -471,7 +501,6 @@ Tunggu system memberikan hasil eksekusi tool tersebut sebelum menjawab final.
                         geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
                     }
                 }
-
             } else if (name === "analyzeTokenActivity") {
                 if (!body.walletContext?.isConnected) {
                     const followUpContent = `System: User is not connected. Tell them to connect wallet first.`;

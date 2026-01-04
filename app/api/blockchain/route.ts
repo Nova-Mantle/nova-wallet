@@ -25,6 +25,17 @@ export async function POST(request: NextRequest) {
         switch (action) {
             case 'portfolio':
                 result = await getPortfolioAnalysis(address, chainId);
+                
+                // ✅ ADD DEBUG LOGGING HERE
+                console.log("\n🔍 PORTFOLIO RESULT:");
+                console.log("  Chain:", result.chain);
+                console.log("  Metadata nativeToken:", result.metadata?.nativeToken);
+                if (result.data.type === 'portfolio') {
+                    console.log("  Native Balance:", result.data.analysis.nativeBalance);
+                    console.log("  Native Value USD:", result.data.analysis.nativeValueUSD);
+                    console.log("  Top 3 tokens:", result.data.analysis.tokenHoldings?.slice(0, 3).map(t => `${t.tokenSymbol}: $${t.currentValueUSD.toFixed(2)}`));
+                }
+                console.log("---\n");
                 break;
 
             case 'token_activity':
@@ -47,9 +58,9 @@ export async function POST(request: NextRequest) {
     } catch (error: any) {
         console.error('[Blockchain API Error]', error);
         return NextResponse.json(
-            { 
-                success: false, 
-                error: error.message || 'Failed to analyze blockchain data' 
+            {
+                success: false,
+                error: error.message || 'Failed to analyze blockchain data'
             },
             { status: 500 }
         );
