@@ -16,7 +16,7 @@ import { CustomUserMessage } from "@/components/chat/CustomUserMessage";
 import { CustomChatInput } from "@/components/chat/CustomChatInput";
 import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { Button } from "@/components/ui/button";
-import { Wallet, Sparkles, Send } from "lucide-react";
+import { Wallet, Sparkles, Send, Activity, Fuel } from "lucide-react";
 import { toast } from "sonner";
 
 // CopilotKit Imports
@@ -24,6 +24,11 @@ import { CopilotKit, useCopilotAction, useCopilotChat } from "@copilotkit/react-
 import { CopilotChat } from "@copilotkit/react-ui";
 import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
 import "@copilotkit/react-ui/styles.css";
+
+// New Generative UI Components
+import { PortfolioCard } from "@/components/chat/PortfolioCard";
+import { TokenActivityCard } from "@/components/chat/TokenActivityCard";
+import { TransactionStatsCard } from "@/components/chat/TransactionStatsCard";
 
 export default function ChatPage() {
     return (
@@ -138,6 +143,11 @@ function ChatPageContent() {
         amount: number;
         side: "buy" | "sell";
     } | null>(null);
+
+    // State for Portfolio Data
+    const portfolioDataRef = useRef<any>(null);
+    const tokenActivityDataRef = useRef<any>(null);
+    const transactionStatsDataRef = useRef<any>(null);
 
     // ============================================
     // EXISTING ACTION: Check All Balances
@@ -539,28 +549,15 @@ function ChatPageContent() {
                 const { data: result } = await response.json();
 
                 if (result.data.type === 'portfolio') {
-                    const portfolio = result.data.analysis;
+                    // Update state to render UI
+                    portfolioDataRef.current = {
+                        chainName: result.chain,
+                        analysis: result.data.analysis,
+                        nativeToken: result.metadata?.nativeToken || 'ETH'
+                    };
+                    forceUpdate(n => n + 1);
 
-                    // Format response for AI
-                    let response = `✅ Portfolio Analysis Complete (${result.chain}):\n\n`;
-                    const nativeTokenSymbol = result.metadata?.nativeToken || 'ETH';
-                    response += `💰 Native Balance: ${portfolio.nativeBalance.toFixed(4)} ${nativeTokenSymbol}\n`;
-                    response += `💵 Native Value: $${portfolio.nativeValueUSD.toFixed(2)}\n\n`;
-
-                    if (portfolio.numTokens > 0) {
-                        response += `📊 Token Holdings (${portfolio.numTokens} tokens):\n`;
-                        portfolio.tokenHoldings.slice(0, 5).forEach((token: any, i: number) => {
-                            response += `${i + 1}. ${token.tokenSymbol}: ${token.balance.toFixed(4)} tokens\n`;
-                            response += `   Value: $${token.currentValueUSD.toFixed(2)} | P&L: ${token.pnlPercentage > 0 ? '+' : ''}${token.pnlPercentage.toFixed(2)}%\n`;
-                        });
-
-                        response += `\n💼 Total Portfolio: $${portfolio.totalPortfolioValueUSD.toFixed(2)}\n`;
-                        response += `📈 Total P&L: ${portfolio.totalPnLPercentage > 0 ? '+' : ''}${portfolio.totalPnLPercentage.toFixed(2)}%`;
-                    } else {
-                        response += `ℹ️ No ERC-20 tokens found. Only native balance available.`;
-                    }
-
-                    return response;
+                    return `Portfolio analysis rendered above for ${walletAddress}.`;
                 }
 
                 return "Failed to analyze portfolio. Please try again.";
@@ -571,7 +568,27 @@ function ChatPageContent() {
         },
         render: ({ status }) => {
             if (status === "executing") {
-                return <div className="text-sm text-muted-foreground animate-pulse">🔍 Analyzing on-chain portfolio data...</div>;
+                return (
+                    <div className="flex items-center gap-2 p-4 bg-blue-50 rounded-xl border border-blue-100 max-w-sm mt-3 animate-pulse">
+                        <div className="w-8 h-8 rounded-full bg-blue-200 flex items-center justify-center">
+                            <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                        </div>
+                        <span className="text-sm text-blue-700">Analyzing wallet portfolio...</span>
+                    </div>
+                );
+            } else if (status === "complete" && portfolioDataRef.current) {
+                const { analysis, chainName, nativeToken } = portfolioDataRef.current;
+                return (
+                    <PortfolioCard
+                        totalValueUSD={analysis.totalPortfolioValueUSD}
+                        totalPnLPercentage={analysis.totalPnLPercentage}
+                        nativeBalance={analysis.nativeBalance}
+                        nativeToken={nativeToken}
+                        nativeValueUSD={analysis.nativeValueUSD}
+                        tokens={analysis.tokenHoldings}
+                        chainName={chainName}
+                    />
+                );
             }
             return <></>;
         },
@@ -616,30 +633,14 @@ function ChatPageContent() {
                 const { data: result } = await response.json();
 
                 if (result.data.type === 'token_activity') {
-                    const activity = result.data.analysis;
-                    const summary = activity.summary;
+                    // Store for UI
+                    tokenActivityDataRef.current = {
+                        summary: result.data.analysis.summary,
+                        chainName: result.chain
+                    };
+                    forceUpdate(n => n + 1);
 
-                    let response = `✅ Token Activity Analysis (${result.chain}):\n\n`;
-                    response += `📊 Trading Summary:\n`;
-                    response += `• Tokens Bought: ${summary.numTokensBought}\n`;
-                    response += `• Tokens Sold: ${summary.numTokensSold}\n`;
-                    response += `• Total Invested: $${summary.totalInvestedUSD.toFixed(2)}\n`;
-                    response += `• Current Value: $${summary.currentPortfolioValueUSD.toFixed(2)}\n`;
-                    response += `• P&L: ${summary.totalPnLPercentage > 0 ? '+' : ''}${summary.totalPnLPercentage.toFixed(2)}% ($${summary.totalPnL > 0 ? '+' : ''}${summary.totalPnL.toFixed(2)})\n\n`;
-
-                    if (summary.mostProfitableToken) {
-                        const best = summary.mostProfitableToken;
-                        response += `🏆 Most Profitable: ${best.tokenSymbol}\n`;
-                        response += `   P&L: +${best.pnlPercentage.toFixed(2)}% ($${best.pnl.toFixed(2)})\n\n`;
-                    }
-
-                    if (summary.biggestLoserToken && summary.biggestLoserToken.pnl < 0) {
-                        const worst = summary.biggestLoserToken;
-                        response += `📉 Biggest Loss: ${worst.tokenSymbol}\n`;
-                        response += `   P&L: ${worst.pnlPercentage.toFixed(2)}% ($${worst.pnl.toFixed(2)})\n`;
-                    }
-
-                    return response;
+                    return `Trading activity analysis rendered above.`;
                 }
 
                 return "Failed to analyze token activity. Please try again.";
@@ -650,7 +651,21 @@ function ChatPageContent() {
         },
         render: ({ status }) => {
             if (status === "executing") {
-                return <div className="text-sm text-muted-foreground animate-pulse">📊 Analyzing trading history & P&L...</div>;
+                return (
+                    <div className="flex items-center gap-2 p-4 bg-orange-50 rounded-xl border border-orange-100 max-w-sm mt-3 animate-pulse">
+                        <div className="w-8 h-8 rounded-full bg-orange-200 flex items-center justify-center">
+                            <Activity className="w-4 h-4 text-orange-600 animate-pulse" />
+                        </div>
+                        <span className="text-sm text-orange-700">Calculating trading P&L...</span>
+                    </div>
+                );
+            } else if (status === "complete" && tokenActivityDataRef.current) {
+                return (
+                    <TokenActivityCard
+                        summary={tokenActivityDataRef.current.summary}
+                        chainName={tokenActivityDataRef.current.chainName}
+                    />
+                );
             }
             return <></>;
         },
@@ -693,23 +708,14 @@ function ChatPageContent() {
                 const { data: result } = await response.json();
 
                 if (result.data.type === 'transaction_stats') {
-                    const stats = result.data.stats;
+                    // Store for UI
+                    transactionStatsDataRef.current = {
+                        stats: result.data.stats,
+                        chainName: result.chain
+                    };
+                    forceUpdate(n => n + 1);
 
-                    let response = `✅ Transaction Statistics (${result.chain}):\n\n`;
-                    response += `📈 Activity Overview:\n`;
-                    response += `• Total Transactions: ${stats.totalTransactions}\n`;
-                    response += `• Sent: ${stats.transactionsSent} | Received: ${stats.transactionsReceived}\n`;
-                    response += `• Native Txs: ${stats.ethTransactions} | Token Txs: ${stats.erc20Transactions}\n\n`;
-
-                    response += `⛽ Gas Spending:\n`;
-                    response += `• Total Gas Spent: $${stats.totalGasSpentUSD.toFixed(2)}\n`;
-                    response += `• Average per Tx: $${stats.averageGasPerTxUSD.toFixed(4)}\n\n`;
-
-                    response += `📅 Account Info:\n`;
-                    response += `• Account Age: ${stats.accountAgeDays} days\n`;
-                    response += `• Activity Level: ${stats.activityFrequency}\n`;
-
-                    return response;
+                    return `Transaction statistics rendered above.`;
                 }
 
                 return "Failed to get transaction stats. Please try again.";
@@ -720,7 +726,21 @@ function ChatPageContent() {
         },
         render: ({ status }) => {
             if (status === "executing") {
-                return <div className="text-sm text-muted-foreground animate-pulse">⛽ Calculating gas & transaction stats...</div>;
+                return (
+                    <div className="flex items-center gap-2 p-4 bg-gray-50 rounded-xl border border-gray-200 max-w-sm mt-3 animate-pulse">
+                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                            <Fuel className="w-4 h-4 text-gray-600 animate-pulse" />
+                        </div>
+                        <span className="text-sm text-gray-700">Calculating gas usage...</span>
+                    </div>
+                );
+            } else if (status === "complete" && transactionStatsDataRef.current) {
+                return (
+                    <TransactionStatsCard
+                        stats={transactionStatsDataRef.current.stats}
+                        chainName={transactionStatsDataRef.current.chainName}
+                    />
+                );
             }
             return <></>;
         },
