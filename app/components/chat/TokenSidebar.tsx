@@ -7,7 +7,25 @@ import { cn } from "@/lib/utils";
 import { supportedChains } from "@/config/chains";
 import Image from "next/image";
 
-// Token logo mapping
+// Chain Logo Mapping (By Chain ID)
+// This fixes the issue where multiple chains use "ETH" symbol
+const chainLogos: Record<number, string> = {
+  1: '/eth.svg',           // Mainnet
+  11155111: '/eth.svg',    // Sepolia
+  5000: '/mantle.svg',     // Mantle
+  5003: '/mantle.svg',     // Mantle Sepolia
+  4202: '/lisk.svg',       // Lisk Sepolia
+  137: '/polygon.svg',     // Polygon
+  80002: '/polygon.svg',   // Polygon Amoy
+  10: '/optimism.svg',     // Optimism
+  11155420: '/optimism.svg', // OP Sepolia
+  42161: '/arbitrum.png',  // Arbitrum
+  421614: '/arbitrum.png', // Arb Sepolia
+  8453: '/base.png',       // Base
+  84532: '/base.png',      // Base Sepolia
+};
+
+// Fallback Token logo mapping (By Symbol)
 const tokenLogos: Record<string, string> = {
   'ETH': '/eth.svg',
   'MNT': '/mantle.svg',
@@ -105,10 +123,6 @@ export const TokenSidebar = ({ isOpen }: TokenSidebarProps) => {
         } catch (error) {
           console.error("Error fetching prices:", error);
         }
-
-        // Calculate total balance (Portfolio change calculation - kept simple for now based on total USD change)
-        // Note: For now we use the weighted average of 24h changes from fetching prices to show "Last 24h"
-        // Because storing historical balance complex without backend.
       } catch (error) {
         console.error("Error fetching balances:", error);
         setTokens([]);
@@ -204,6 +218,17 @@ export const TokenSidebar = ({ isOpen }: TokenSidebarProps) => {
               const percent = totalUsdValue > 0 ? (usdValue / totalUsdValue) * 100 : 0;
               const change = priceData?.change || 0;
 
+              // Determine Logo: Prefer chain-specific logo, fallback to symbol-based
+              const logoSrc = chainLogos[token.chainId] || tokenLogos[token.symbol];
+
+              // Determine Display Name
+              let displayName = token.name;
+              // Specific overrides for clearer naming if 'token.name' is generic
+              if (token.symbol === 'ETH' && token.name === 'Ethereum' && token.chainId === 10) displayName = 'Optimism';
+              if (token.symbol === 'ETH' && token.name === 'Ethereum' && token.chainId === 8453) displayName = 'Base';
+              if (token.symbol === 'ETH' && token.name === 'Ethereum' && token.chainId === 42161) displayName = 'Arbitrum';
+
+
               return (
                 <div
                   key={`${token.chainId}-${token.symbol}`}
@@ -212,10 +237,10 @@ export const TokenSidebar = ({ isOpen }: TokenSidebarProps) => {
                   {/* Left: Icon + Name/Percent + Balance/Symbol */}
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gray-100 overflow-hidden shrink-0">
-                      {tokenLogos[token.symbol] ? (
+                      {logoSrc ? (
                         <Image
-                          src={tokenLogos[token.symbol]}
-                          alt={token.symbol}
+                          src={logoSrc}
+                          alt={displayName}
                           width={40}
                           height={40}
                           className="object-contain h-8 w-8"
@@ -229,7 +254,7 @@ export const TokenSidebar = ({ isOpen }: TokenSidebarProps) => {
 
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm">{token.symbol === 'ETH' ? 'Ethereum' : token.symbol === 'MATIC' ? 'Polygon' : token.name}</span>
+                        <span className="font-semibold text-sm">{displayName}</span>
                         {/* Percent Badge */}
                         <span className="bg-muted text-muted-foreground text-[10px] px-1.5 py-0.5 rounded font-medium">
                           {percent < 0.1 && percent > 0 ? "<0.1%" : `${percent.toFixed(1)}%`}
