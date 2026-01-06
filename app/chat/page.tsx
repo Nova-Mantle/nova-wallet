@@ -31,6 +31,8 @@ import { TokenActivityCard } from "@/components/chat/TokenActivityCard";
 import { TransactionStatsCard } from "@/components/chat/TransactionStatsCard";
 import { CreatePaymentForm } from "@/components/chat/CreatePaymentForm";
 import { PaymentStatusCard } from "@/components/chat/PaymentStatusCard";
+import { SendTransactionForm } from "@/components/chat/forms/SendTransactionForm";
+import { SlippageForm } from "@/components/chat/forms/SlippageForm";
 import axios from "axios";
 
 export default function ChatPage() {
@@ -249,13 +251,37 @@ function ChatPageContent() {
     // ============================================
     useCopilotAction({
         name: "prepareTransaction",
-        description: "Prepare a cryptocurrency transaction for the user to sign. Use this when the user wants to send money. ALWAYS ask for the chain/network if not specified.",
+        description: "Prepare a cryptocurrency transaction. IMPORTANT: If recipient or amount is missing, DO NOT ASK in chat. Call this tool immediately with empty arguments so the interactive form appears.",
         parameters: [
             { name: "recipient", type: "string", description: "The recipient wallet address (0x...)" },
             { name: "amount", type: "string", description: "The amount of native tokens to send (e.g., 0.1)" },
             { name: "chainId", type: "number", description: "The chain ID for the transaction. MUST be one of: 1 (Mainnet), 5000 (Mantle), 11155111 (Sepolia), 5003 (Mantle Sepolia), 4202 (Lisk Sepolia), 84532 (Base Sepolia), 11155420 (Op Sepolia).", required: true },
         ],
         render: ({ status, args }) => {
+            // Case 1: Execution started but arguments missing (triggered by button click)
+            // Or explicitly executing but waiting for args
+            if (status === "executing" && (!args.recipient || !args.amount)) {
+                return (
+                    <div className="mt-2">
+                        <SendTransactionForm
+                            defaultValues={{
+                                recipient: args.recipient,
+                                amount: args.amount,
+                            }}
+                            onSubmit={async (data) => {
+                                const msg = `Send ${data.amount} ${data.token} to ${data.recipient}`;
+                                await appendMessage(
+                                    new TextMessage({
+                                        role: MessageRole.User,
+                                        content: msg,
+                                    })
+                                );
+                            }}
+                        />
+                    </div>
+                );
+            }
+
             if (status === "executing") {
                 return <div className="text-muted-foreground">Preparing transaction...</div>;
             }
@@ -368,6 +394,29 @@ function ChatPageContent() {
                     />
                 );
             }
+            if (status === "executing" && (!args.symbol || !args.amount)) {
+                return (
+                    <div className="mt-2">
+                        <SlippageForm
+                            defaultValues={{
+                                symbol: args.symbol,
+                                amount: args.amount ? String(args.amount) : undefined,
+                                side: args.side as "buy" | "sell"
+                            }}
+                            onSubmit={async (data) => {
+                                const msg = `Analyze slippage for ${data.side} ${data.amount} ${data.symbol}`;
+                                await appendMessage(
+                                    new TextMessage({
+                                        role: MessageRole.User,
+                                        content: msg,
+                                    })
+                                );
+                            }}
+                        />
+                    </div>
+                );
+            }
+
             if (status === "executing") {
                 return <div className="text-sm text-gray-500 italic animate-pulse">🤖 Analyzing market depth & predicted slippage...</div>;
             }
@@ -755,7 +804,7 @@ function ChatPageContent() {
     // ============================================
     useCopilotAction({
         name: "createPaymentLink",
-        description: "Buat payment link untuk menerima pembayaran crypto. Gunakan ini ketika user bilang 'buat payment link', 'mau terima bayaran', 'create invoice', dll. Jika parameter amount/token belum ada, action ini akan menampilkan form input.",
+        description: "Buat payment link. PENTING: Jika parameter amount/token belum ada, JANGAN TANYA di chat. Langsung panggil tool ini agar form input muncul.",
         parameters: [
             { name: "amount", type: "number", description: "Jumlah crypto (e.g. 0.1)", required: false },
             { name: "token", type: "string", description: "Symbol token (ETH, USDC, MNT, dll)", required: false },
@@ -918,15 +967,21 @@ function ChatPageContent() {
                                 <WelcomeScreen
                                     onActionClick={(action) => {
                                         const actionMessages: Record<string, string> = {
-                                            send: "Saya ingin mengirim crypto",
-                                            receive: "Tampilkan alamat wallet saya",
-                                            swap: "Saya ingin swap token",
-                                            paylink: "Buat payment link",
-                                            portfolio: "Cek portfolio saya",
-                                            search: "Saya ingin mencari transaksi onchain",
-                                            slippage: "Prediksi slippage untuk trading"
+                                            send: "Prepare a transaction",
+                                            receive: "Show my wallet address",
+                                            swap: "I want to swap tokens",
+                                            paylink: "Create a payment link",
+                                            portfolio: "Analyze my portfolio",
+                                            search: "Search onchain activity", // This might need a form too, but for now text
+                                            slippage: "Predict trade slippage"
                                         };
-                                        setInputValue(actionMessages[action] || "");
+                                        const msg = actionMessages[action] || "";
+
+                                        // Immediately send the message
+                                        setInputValue("");
+                                        setShowWelcome(false);
+                                        setHasStartedChat(true);
+                                        setPendingMessage(msg);
                                     }}
                                 />
                             </div>
