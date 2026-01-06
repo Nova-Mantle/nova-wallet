@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "set NEXT_DISABLE_TURBOPACK=1 && next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
     "test:integration": "ts-node --project tsconfig.test.json -r tsconfig-paths/register test/test-blockchain-integration.ts"
