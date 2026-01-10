@@ -1,28 +1,24 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { useAccount, useSendTransaction, useChainId } from "wagmi";
-import { parseEther } from "viem";
+import { useState, useEffect } from "react";
+import { useAccount, useChainId } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { ChatHeader } from "@/components/chat/ChatHeader";
 import { TokenSidebar } from "@/components/chat/TokenSidebar";
-import { TransactionCard } from "@/components/chat/TransactionCard";
-import { BalanceCard } from "@/components/chat/BalanceCard";
-import { MultiChainBalanceCard } from "@/components/chat/MultiChainBalanceCard";
-import { InfoCard } from "@/components/chat/InfoCard";
-import { SlippageCard } from "@/components/chat/SlippageCard";
 import { CustomUserMessage } from "@/components/chat/CustomUserMessage";
 import { CustomChatInput } from "@/components/chat/CustomChatInput";
 import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { Button } from "@/components/ui/button";
 import { Wallet, Sparkles, Send } from "lucide-react";
-import { toast } from "sonner";
 
 // CopilotKit Imports
-import { CopilotKit, useCopilotAction, useCopilotChat } from "@copilotkit/react-core";
+import { CopilotKit, useCopilotChat } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
 import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
 import "@copilotkit/react-ui/styles.css";
+
+// Import the custom actions hook
+import { useNovaActions } from "./actions/useNovaActions";
 
 export default function ChatPage() {
     return (
@@ -36,7 +32,6 @@ function ChatPageContent() {
     const { isConnected, address } = useAccount();
     const chainId = useChainId();
     const { openConnectModal } = useConnectModal();
-    const { sendTransaction } = useSendTransaction();
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [isMounted, setIsMounted] = useState(false);
     const [showWelcome, setShowWelcome] = useState(true);
@@ -44,661 +39,145 @@ function ChatPageContent() {
     const [hasStartedChat, setHasStartedChat] = useState(false);
     const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
+    // Register all Nova AI actions
+    useNovaActions();
+
     // useCopilotChat for programmatic message sending
     const { appendMessage } = useCopilotChat();
 
-    // State to store balance data for Generative UI
-    const [balanceData, setBalanceData] = useState<{
-        balance: string;
-        tokenSymbol: string;
-        chainName: string;
-    } | null>(null);
-
     // ============================================
-    // EXISTING ACTION: Check Balance
+    // FIXED CONSTANTS (Instructions)
     // ============================================
-    useCopilotAction({
-        name: "checkBalance",
-        description: "Cek saldo wallet user di blockchain tertentu. Gunakan ini ketika user mau tahu saldo mereka, cek balance, atau lihat berapa crypto yang dimiliki.",
-        parameters: [
-            { name: "chainId", type: "number", description: "The chain ID to check balance on (e.g., 5000 for Mantle Mainnet, 5003 for Mantle Sepolia)", required: false },
-        ],
-        handler: async ({ chainId: targetChainId }) => {
-            console.log("🔥 checkBalance action called!", { targetChainId }); // DEBUG
-            if (!isConnected || !address) {
-                return "User wallet is not connected. Please ask the user to connect their wallet first.";
-            }
-
-            try {
-                const resolvedChainId = targetChainId || chainId;
-                const response = await fetch("/api/wallet/balance", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ address, chainId: resolvedChainId }),
-                });
-
-                if (!response.ok) {
-                    const error = await response.json();
-                    setBalanceData(null);
-                    return `Error checking balance: ${error.error || "Unknown error"}`;
-                }
-
-                const data = await response.json();
-                setBalanceData({
-                    balance: data.balanceEth,
-                    tokenSymbol: data.tokenSymbol,
-                    chainName: data.formattedChainName,
-                });
-                return `Saldo user: ${data.balanceEth} ${data.tokenSymbol} di ${data.formattedChainName}. Card balance sudah ditampilkan.`;
-            } catch (error: any) {
-                setBalanceData(null);
-                return `Error: ${error.message}`;
-            }
-        },
-        render: ({ status }) => {
-            if (status === "executing") {
-                return (
-                    <div className="flex items-center gap-2 p-4 bg-purple-50 rounded-xl border border-purple-100 max-w-sm mt-3">
-                        <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-                        <span className="text-sm text-purple-700">Checking balance...</span>
-                    </div>
-                );
-            }
-            if (status === "complete" && balanceData && address) {
-                return (
-                    <BalanceCard
-                        balance={balanceData.balance}
-                        tokenSymbol={balanceData.tokenSymbol}
-                        chainName={balanceData.chainName}
-                        address={address}
-                    />
-                );
-            }
-            return <></>;
-        },
-    });
-
-    // Ref for multi-chain balances (synchronous access in render)
-    const multiChainBalancesRef = useRef<{
-        chainName: string;
-        balance: string;
-        symbol: string;
-    }[] | null>(null);
-
-    // State to trigger re-render after data is set
-    const [, forceUpdate] = useState(0);
-
-    // State for slippage prediction
-    const slippageDataRef = useRef<{
-        best_venue: string;
-        quotes: any[];
-        symbol: string;
-        amount: number;
-        side: "buy" | "sell";
-    } | null>(null);
-
-    // ============================================
-    // EXISTING ACTION: Check All Balances
-    // ============================================
-    useCopilotAction({
-        name: "checkAllBalances",
-        description: "Cek saldo wallet user di SEMUA chain yang tersedia sekaligus. Gunakan ini ketika user mau lihat semua saldo, cek portfolio, atau lihat balance di setiap chain.",
-        handler: async () => {
-            console.log("🔥 checkAllBalances action called!"); // DEBUG
-            if (!isConnected || !address) {
-                return "User wallet is not connected. Please ask the user to connect their wallet first.";
-            }
-
-            try {
-                // Fetch balances from all supported chains
-                const chainIds = [11155111, 5003, 84532, 11155420, 4202, 80002, 421614];
-                const balancePromises = chainIds.map(async (cid) => {
-                    try {
-                        const response = await fetch("/api/wallet/balance", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ address, chainId: cid }),
-                        });
-                        if (response.ok) {
-                            const data = await response.json();
-                            return {
-                                chainName: data.formattedChainName,
-                                balance: data.balanceEth,
-                                symbol: data.tokenSymbol,
-                            };
-                        }
-                        return null;
-                    } catch {
-                        return null;
-                    }
-                });
-
-                const results = await Promise.all(balancePromises);
-                const validBalances = results.filter((b): b is NonNullable<typeof b> => b !== null);
-
-                console.log("🔥 checkAllBalances results:", validBalances); // DEBUG
-                multiChainBalancesRef.current = validBalances;
-                forceUpdate(n => n + 1); // Trigger re-render
-                console.log("🔥 multiChainBalances ref set to:", validBalances.length, "chains"); // DEBUG
-
-                const nonZero = validBalances.filter(b => parseFloat(b.balance) > 0);
-                return `Berhasil mengambil saldo dari ${validBalances.length} chains. ${nonZero.length} chains memiliki saldo > 0. Lihat card portfolio di atas.`;
-            } catch (error: any) {
-                console.log("🔥 checkAllBalances error:", error); // DEBUG
-                multiChainBalancesRef.current = null;
-                return `Error: ${error.message}`;
-            }
-        },
-        render: ({ status }) => {
-            if (status === "executing") {
-                return (
-                    <div className="bg-white rounded-2xl border border-gray-200 p-6 max-w-md mt-3 shadow-lg">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 
-                                            flex items-center justify-center animate-pulse">
-                                <Wallet className="w-6 h-6 text-white" />
-                            </div>
-                            <div>
-                                <p className="font-semibold text-gray-900">Checking all chains...</p>
-                                <p className="text-sm text-gray-500">Fetching balances from 7 networks</p>
-                            </div>
-                        </div>
-                        <div className="mt-4 grid grid-cols-7 gap-1">
-                            {[...Array(7)].map((_, i) => (
-                                <div
-                                    key={i}
-                                    className="h-1.5 rounded-full bg-purple-200 animate-pulse"
-                                    style={{ animationDelay: `${i * 100}ms` }}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                );
-            }
-            if (status === "complete" && multiChainBalancesRef.current && address) {
-                console.log("🔥 Rendering MultiChainBalanceCard with:", multiChainBalancesRef.current); // DEBUG
-                return (
-                    <MultiChainBalanceCard
-                        balances={multiChainBalancesRef.current}
-                        address={address}
-                    />
-                );
-            }
-            return <></>;
-        },
-    });
-
-    // ============================================
-    // EXISTING ACTION: Prepare Transaction
-    // ============================================
-    useCopilotAction({
-        name: "prepareTransaction",
-        description: "Prepare a cryptocurrency transaction for the user to sign. Use this when the user wants to send money.",
-        parameters: [
-            { name: "recipient", type: "string", description: "The recipient wallet address (0x...)" },
-            { name: "amount", type: "string", description: "The amount of native tokens to send (e.g., 0.1)" },
-            { name: "chainId", type: "number", description: "The chain ID for the transaction", required: false },
-        ],
-        render: ({ status, args }) => {
-            if (status === "executing") {
-                return <div className="text-muted-foreground">Preparing transaction...</div>;
-            }
-
-            if (status === "complete" && args.recipient && args.amount) {
-                return (
-                    <TransactionCard
-                        type="send"
-                        data={{
-                            token: "MNT",
-                            amount: args.amount,
-                            network: "Mantle",
-                            recipient: args.recipient,
-                            gasFee: "< 0.01 MNT",
-                        }}
-                        onCancel={() => {
-                            toast.info("Transaction cancelled");
-                        }}
-                        onConfirm={() => {
-                            try {
-                                sendTransaction({
-                                    to: args.recipient as `0x${string}`,
-                                    value: parseEther(args.amount),
-                                }, {
-                                    onSuccess: (hash) => {
-                                        toast.success("Transaction submitted!", {
-                                            description: `Hash: ${hash.slice(0, 10)}...${hash.slice(-8)}`
-                                        });
-                                    },
-                                    onError: (error) => {
-                                        toast.error("Transaction failed", {
-                                            description: error.message
-                                        });
-                                    }
-                                });
-                            } catch (error) {
-                                const errorMessage = error instanceof Error ? error.message : "Unknown error";
-                                toast.error("Error", { description: errorMessage });
-                            }
-                        }}
-                    />
-                );
-            }
-
-            return <></>;
-        },
-        handler: async ({ recipient, amount, chainId: targetChainId }) => {
-            if (!isConnected || !address) {
-                return "User wallet is not connected. Please ask the user to connect their wallet first.";
-            }
-
-            // Validate address
-            if (!recipient || !recipient.startsWith("0x") || recipient.length !== 42) {
-                return "Invalid recipient address. Please provide a valid Ethereum address (0x...).";
-            }
-
-            // Validate amount
-            const amountNum = parseFloat(amount);
-            if (isNaN(amountNum) || amountNum <= 0) {
-                return "Invalid amount. Please provide a valid positive number.";
-            }
-
-            return `Transaction prepared: Sending ${amount} tokens to ${recipient}. Please confirm the transaction in the UI above.`;
-        },
-    });
-
-    // ============================================
-    // EXISTING ACTION: Predict Trade Cost
-    // ============================================
-    useCopilotAction({
-        name: "predictTradeCost",
-        description: "Predicts execution cost and slippage for a trade. Use this when user wants to analyze trade cost, check slippage, or compare exchanges for CEX (Binance, Kraken, etc).",
-        parameters: [
-            { name: "symbol", type: "string", description: "Trading pair symbol (e.g., BTC/USDT, ETH/USDT)" },
-            { name: "amount", type: "number", description: "Amount of crypto to trade" },
-            { name: "side", type: "string", description: "Trade side: 'buy' or 'sell'" },
-        ],
-        render: ({ status, args }) => {
-            if (status === "complete" && slippageDataRef.current) {
-                return (
-                    <SlippageCard
-                        symbol={slippageDataRef.current.symbol}
-                        amount={slippageDataRef.current.amount}
-                        side={slippageDataRef.current.side}
-                        quotes={slippageDataRef.current.quotes}
-                    />
-                );
-            }
-            if (status === "executing") {
-                return <div className="text-sm text-gray-500 italic animate-pulse">🤖 Analyzing market depth & predicted slippage...</div>;
-            }
-            return <></>;
-        },
-        handler: async ({ symbol, amount, side }) => {
-            console.log("🔥 predictTradeCost action called!", { symbol, amount, side }); // DEBUG
-            try {
-                // Determine side if not provided or valid
-                const tradeSide = (side && ['buy', 'sell'].includes(side.toLowerCase())) ? side.toLowerCase() : 'sell';
-
-                const response = await fetch("/api/ai/predict-cost", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ symbol: symbol.toUpperCase(), amount, side: tradeSide }),
-                });
-
-                if (!response.ok) throw new Error("Failed to fetch prediction");
-
-                const data = await response.json();
-
-                slippageDataRef.current = {
-                    ...data,
-                    symbol: symbol.toUpperCase(),
-                    amount,
-                    side: tradeSide as "buy" | "sell"
-                };
-                forceUpdate(n => n + 1); // Trigger render
-
-                return `Prediction complete. View the card above.`;
-            } catch (error: any) {
-                console.error("🔥 predictTradeCost error:", error);
-
-                // Fallback Mock Data if API fails (for demo/resilience)
-                const mockQuotes = [
-                    { exchange: "binance", quote_price: 98000 * (amount || 1), predicted_slippage_pct: 0.001, total_cost: 98150 * (amount || 1), fees: { trading_fee: 50, slippage_cost: 100 } },
-                    { exchange: "kraken", quote_price: 98050 * (amount || 1), predicted_slippage_pct: 0.0015, total_cost: 98250 * (amount || 1), fees: { trading_fee: 60, slippage_cost: 140 } },
-                    { exchange: "coinbase", quote_price: 98100 * (amount || 1), predicted_slippage_pct: 0.002, total_cost: 98400 * (amount || 1), fees: { trading_fee: 80, slippage_cost: 220 } },
-                ];
-
-                slippageDataRef.current = {
-                    best_venue: "binance",
-                    quotes: mockQuotes,
-                    symbol: symbol.toUpperCase(),
-                    amount,
-                    side: (side && ['buy', 'sell'].includes(side.toLowerCase())) ? (side.toLowerCase() as "buy" | "sell") : 'sell'
-                };
-                forceUpdate(n => n + 1);
-
-                return `API Error (${error.message}). Showing simulated data for demonstration.`;
-            }
-        },
-    });
-
-    // ============================================
-    // EXISTING ACTION: Show Receive Address
-    // ============================================
-    useCopilotAction({
-        name: "showReceiveAddress",
-        description: "Tampilkan alamat wallet user dengan QR code untuk menerima crypto. Gunakan ini ketika user ingin menerima token, melihat alamat wallet mereka, meminta QR code, atau share address.",
-        handler: async () => {
-            if (!isConnected || !address) {
-                return "User wallet is not connected. Please ask the user to connect their wallet first.";
-            }
-
-            return `Alamat wallet user: ${address}. QR code dan tombol copy sudah ditampilkan di atas.`;
-        },
-        render: ({ status }) => {
-            // Always show the receive card when action is complete
-            if (status === "complete" && address) {
-                return (
-                    <TransactionCard
-                        type="receive"
-                        data={{
-                            address: address,
-                            token: "MNT",
-                        }}
-                        onClose={() => { }}
-                    />
-                );
-            }
-            if (status === "executing") {
-                return <div className="text-muted-foreground text-sm">Generating QR code...</div>;
-            }
-            return <></>;
-        },
-    });
-
-    // ============================================
-    // EXISTING ACTION: Display Info Card
-    // ============================================
-    useCopilotAction({
-        name: "displayInfoCard",
-        description: "Tampilkan informasi umum dalam format card. JANGAN gunakan untuk menampilkan saldo/balance - gunakan checkBalance atau checkAllBalances untuk itu. Gunakan displayInfoCard hanya untuk: tips crypto, penjelasan blockchain, status transaksi, atau informasi edukasi.",
-        parameters: [
-            { name: "title", type: "string", description: "Judul card" },
-            { name: "content", type: "string", description: "Konten utama card (opsional)", required: false },
-            {
-                name: "items",
-                type: "object[]",
-                description: "Array of items dengan label dan value untuk ditampilkan. Format: [{label: string, value: string}]",
-                required: false
-            },
-            {
-                name: "type",
-                type: "string",
-                description: "Tipe card: 'info' (biru), 'success' (hijau), 'warning' (kuning), 'error' (merah)",
-                required: false
-            },
-        ],
-        render: ({ status, args }) => {
-            // BLOCK: Don't render anything balance/saldo related
-            const blockedKeywords = ['saldo', 'balance', 'portfolio', 'chain 1', 'chain 2', 'eth', 'btc', 'bnb'];
-            const titleLower = (args.title || '').toLowerCase();
-            if (blockedKeywords.some(kw => titleLower.includes(kw))) {
-                return <></>;  // Don't render fake balance cards
-            }
-
-            if (status === "complete" && args.title) {
-                return (
-                    <InfoCard
-                        title={args.title}
-                        content={args.content}
-                        items={args.items as { label: string; value: string }[]}
-                        type={args.type as "info" | "success" | "warning" | "error"}
-                    />
-                );
-            }
-            return <></>;
-        },
-        handler: async ({ title }) => {
-            console.log("🔥 displayInfoCard action called!", { title }); // DEBUG
-
-            // BLOCK: Reject balance-related requests
-            const blockedKeywords = ['saldo', 'balance', 'portfolio'];
-            const titleLower = (title || '').toLowerCase();
-            if (blockedKeywords.some(kw => titleLower.includes(kw))) {
-                return "ERROR: Jangan gunakan displayInfoCard untuk balance/saldo. Gunakan checkBalance atau checkAllBalances.";
-            }
-
-            return `Informasi "${title}" berhasil ditampilkan dalam format card.`;
-        },
-    });
-
-    // ============================================
-    // NEW ACTION 1: Analyze Portfolio (All Tokens)
-    // ============================================
-    useCopilotAction({
-        name: "analyzePortfolio",
-        description: "Analisis portfolio lengkap wallet: semua token holdings (native + ERC-20), nilai USD, profit/loss. Gunakan ini ketika user bertanya 'portfolio aku', 'analyze address 0x...', 'holdings', dll.",
-        parameters: [
-            { name: "targetAddress", type: "string", description: "Wallet address to analyze (0x...). If not provided, uses connected wallet address.", required: false },
-            { name: "chainId", type: "number", description: "Chain ID untuk analisis (default: chain yang sedang aktif)", required: false },
-        ],
-        handler: async ({ targetAddress, chainId: targetChainId }) => {
-            console.log("🔥 analyzePortfolio action called!", { targetAddress, targetChainId });
-
-            // Use provided address or fall back to connected wallet
-            const walletAddress = targetAddress || address;
-
-            if (!walletAddress) {
-                return "No address provided and wallet is not connected. Please provide an address (0x...) or connect your wallet.";
-            }
-
-            try {
-                const resolvedChainId = targetChainId || chainId;
-
-                // Call blockchain API route (server-side)
-                const response = await fetch('/api/blockchain', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: 'portfolio',
-                        address: walletAddress,
-                        chainId: resolvedChainId
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to fetch portfolio data');
-                }
-
-                const { data: result } = await response.json();
-
-                if (result.data.type === 'portfolio') {
-                    const portfolio = result.data.analysis;
-
-                    // Format response for AI
-                    let response = `✅ Portfolio Analysis Complete (${result.chain}):\n\n`;
-                    const nativeTokenSymbol = result.metadata?.nativeToken || 'ETH';
-                    response += `💰 Native Balance: ${portfolio.nativeBalance.toFixed(4)} ${nativeTokenSymbol}\n`;
-                    response += `💵 Native Value: $${portfolio.nativeValueUSD.toFixed(2)}\n\n`;
-
-                    if (portfolio.numTokens > 0) {
-                        response += `📊 Token Holdings (${portfolio.numTokens} tokens):\n`;
-                        portfolio.tokenHoldings.slice(0, 5).forEach((token: any, i: number) => {
-                            response += `${i + 1}. ${token.tokenSymbol}: ${token.balance.toFixed(4)} tokens\n`;
-                            response += `   Value: $${token.currentValueUSD.toFixed(2)} | P&L: ${token.pnlPercentage > 0 ? '+' : ''}${token.pnlPercentage.toFixed(2)}%\n`;
-                        });
-
-                        response += `\n💼 Total Portfolio: $${portfolio.totalPortfolioValueUSD.toFixed(2)}\n`;
-                        response += `📈 Total P&L: ${portfolio.totalPnLPercentage > 0 ? '+' : ''}${portfolio.totalPnLPercentage.toFixed(2)}%`;
-                    } else {
-                        response += `ℹ️ No ERC-20 tokens found. Only native balance available.`;
-                    }
-
-                    return response;
-                }
-
-                return "Failed to analyze portfolio. Please try again.";
-            } catch (error: any) {
-                console.error("Portfolio analysis error:", error);
-                return `Error analyzing portfolio: ${error.message}`;
-            }
-        },
-        render: ({ status }) => {
-            if (status === "executing") {
-                return <div className="text-sm text-muted-foreground animate-pulse">🔍 Analyzing on-chain portfolio data...</div>;
-            }
-            return <></>;
-        },
-    });
-
-    // ============================================
-    // NEW ACTION 2: Analyze Token Activity (Trading History)
-    // ============================================
-    useCopilotAction({
-        name: "analyzeTokenActivity",
-        description: "Analisis aktivitas trading wallet user: token yang dibeli/dijual, profit/loss per token, performa trading. Gunakan ini ketika user tanya 'profit aku berapa', 'token apa yang paling untung', 'rugi berapa', 'riwayat trading', dll.",
-        parameters: [
-            { name: "chainId", type: "number", description: "Chain ID untuk analisis", required: false },
-            { name: "timeframeDays", type: "number", description: "Timeframe dalam hari (30, 90, 365, atau all-time)", required: false },
-        ],
-        handler: async ({ chainId: targetChainId, timeframeDays }) => {
-            console.log("🔥 analyzeTokenActivity action called!", { targetChainId, timeframeDays });
-
-            if (!isConnected || !address) {
-                return "User wallet belum terkoneksi. Minta user untuk connect wallet dulu.";
-            }
-
-            try {
-                const resolvedChainId = targetChainId || chainId;
-
-                // Call blockchain API route (server-side)
-                const response = await fetch('/api/blockchain', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: 'token_activity',
-                        address,
-                        chainId: resolvedChainId,
-                        timeframeDays
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to fetch token activity');
-                }
-
-                const { data: result } = await response.json();
-
-                if (result.data.type === 'token_activity') {
-                    const activity = result.data.analysis;
-                    const summary = activity.summary;
-
-                    let response = `✅ Token Activity Analysis (${result.chain}):\n\n`;
-                    response += `📊 Trading Summary:\n`;
-                    response += `• Tokens Bought: ${summary.numTokensBought}\n`;
-                    response += `• Tokens Sold: ${summary.numTokensSold}\n`;
-                    response += `• Total Invested: $${summary.totalInvestedUSD.toFixed(2)}\n`;
-                    response += `• Current Value: $${summary.currentPortfolioValueUSD.toFixed(2)}\n`;
-                    response += `• P&L: ${summary.totalPnLPercentage > 0 ? '+' : ''}${summary.totalPnLPercentage.toFixed(2)}% ($${summary.totalPnL > 0 ? '+' : ''}${summary.totalPnL.toFixed(2)})\n\n`;
-
-                    if (summary.mostProfitableToken) {
-                        const best = summary.mostProfitableToken;
-                        response += `🏆 Most Profitable: ${best.tokenSymbol}\n`;
-                        response += `   P&L: +${best.pnlPercentage.toFixed(2)}% ($${best.pnl.toFixed(2)})\n\n`;
-                    }
-
-                    if (summary.biggestLoserToken && summary.biggestLoserToken.pnl < 0) {
-                        const worst = summary.biggestLoserToken;
-                        response += `📉 Biggest Loss: ${worst.tokenSymbol}\n`;
-                        response += `   P&L: ${worst.pnlPercentage.toFixed(2)}% ($${worst.pnl.toFixed(2)})\n`;
-                    }
-
-                    return response;
-                }
-
-                return "Failed to analyze token activity. Please try again.";
-            } catch (error: any) {
-                console.error("Token activity error:", error);
-                return `Error analyzing trading activity: ${error.message}`;
-            }
-        },
-        render: ({ status }) => {
-            if (status === "executing") {
-                return <div className="text-sm text-muted-foreground animate-pulse">📊 Analyzing trading history & P&L...</div>;
-            }
-            return <></>;
-        },
-    });
-
-    // ============================================
-    // NEW ACTION 3: Transaction Stats (Gas, Activity)
-    // ============================================
-    useCopilotAction({
-        name: "getTransactionStats",
-        description: "Dapatkan statistik transaksi wallet user: total transaksi, gas fees yang dipakai, aktivitas wallet. Gunakan ini ketika user tanya 'berapa gas yang aku habiskan', 'seberapa aktif wallet aku', 'total transaksi', dll.",
-        parameters: [
-            { name: "chainId", type: "number", description: "Chain ID untuk analisis", required: false },
-        ],
-        handler: async ({ chainId: targetChainId }) => {
-            console.log("🔥 getTransactionStats action called!", { targetChainId });
-
-            if (!isConnected || !address) {
-                return "User wallet belum terkoneksi. Minta user untuk connect wallet dulu.";
-            }
-
-            try {
-                const resolvedChainId = targetChainId || chainId;
-
-                // Call blockchain API route (server-side)
-                const response = await fetch('/api/blockchain', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: 'transaction_stats',
-                        address,
-                        chainId: resolvedChainId
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to fetch transaction stats');
-                }
-
-                const { data: result } = await response.json();
-
-                if (result.data.type === 'transaction_stats') {
-                    const stats = result.data.stats;
-
-                    let response = `✅ Transaction Statistics (${result.chain}):\n\n`;
-                    response += `📈 Activity Overview:\n`;
-                    response += `• Total Transactions: ${stats.totalTransactions}\n`;
-                    response += `• Sent: ${stats.transactionsSent} | Received: ${stats.transactionsReceived}\n`;
-                    response += `• Native Txs: ${stats.ethTransactions} | Token Txs: ${stats.erc20Transactions}\n\n`;
-
-                    response += `⛽ Gas Spending:\n`;
-                    response += `• Total Gas Spent: $${stats.totalGasSpentUSD.toFixed(2)}\n`;
-                    response += `• Average per Tx: $${stats.averageGasPerTxUSD.toFixed(4)}\n\n`;
-
-                    response += `📅 Account Info:\n`;
-                    response += `• Account Age: ${stats.accountAgeDays} days\n`;
-                    response += `• Activity Level: ${stats.activityFrequency}\n`;
-
-                    return response;
-                }
-
-                return "Failed to get transaction stats. Please try again.";
-            } catch (error: any) {
-                console.error("Transaction stats error:", error);
-                return `Error getting transaction stats: ${error.message}`;
-            }
-        },
-        render: ({ status }) => {
-            if (status === "executing") {
-                return <div className="text-sm text-muted-foreground animate-pulse">⛽ Calculating gas & transaction stats...</div>;
-            }
-            return <></>;
-        },
-    });
+
+    const SYSTEM_INSTRUCTIONS = `Kamu adalah Nova AI, asisten crypto wallet yang ramah dan helpful. Selalu gunakan Bahasa Indonesia.
+
+🚨🚨🚨 CRITICAL RULE #1 - ADDRESS HANDLING 🚨🚨🚨
+
+When user provides an Ethereum address:
+
+1. CHECK the format:
+   - WITH 0x prefix: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045" ✅
+   - WITHOUT 0x prefix: "d8dA6BF26964aF9D7eEd9e03E53415D37aA96045" ✅ (accepted but needs acknowledgment)
+
+2. IF address is provided WITHOUT "0x" prefix:
+   ⚠️ BEFORE calling any action, you MUST explicitly tell the user:
+   
+   "✅ Saya mendeteksi address tanpa prefix '0x'. Saya akan menambahkan '0x' secara otomatis:
+   
+   Address yang Anda berikan: d8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+   Address yang akan digunakan: 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+   
+   Memulai analisis..."
+
+3. IF address ALREADY has "0x" prefix:
+   ✅ Proceed normally without any special message
+
+4. INVALID addresses (reject immediately):
+   ❌ "vitalik.eth" → ENS not supported
+   ❌ "0x123" → Too short (must be 42 chars total)
+   ❌ "0xZZZZ..." → Invalid hex characters
+
+💡 TIP: Always validate the final address format (0x + 40 hex chars) before calling actions.
+
+🔥 "ANALYZE" SHORTCUT:
+Jika user berkata "analyze <address>", "scan <address>", atau "cek wallet <address>":
+→ JANGAN panggil tool satuan (jangan panggil analyzePortfolio atau analyzeWhale terpisah).
+→ WAJIB panggil SATU tool ini: **analyzeWalletComprehensive**
+→ Tool ini akan menjalankan semua analisis (Portfolio + Whale + Counterparty + Stats) sekaligus.
+
+CONTOH:
+User: "analyze 0xd8dA..."
+AI: [Memanggil analyzeWalletComprehensive] (✅ BENAR)
+AI: [Memanggil analyzePortfolio + analyzeWhale...] (❌ SALAH - terlalu banyak step)
+
+---
+
+TOOLS YANG TERSEDIA:
+
+Basic Actions:
+1. checkBalance - Cek saldo di SATU chain
+2. checkAllBalances - Cek saldo di SEMUA chain (7 chains)
+3. prepareTransaction - Kirim crypto
+4. showReceiveAddress - QR code wallet
+5. displayInfoCard - Tips & edukasi (JANGAN untuk balance!)
+6. predictTradeCost - Analisis slippage CEX
+
+Single-Chain Analysis (gunakan jika user sebutkan chain spesifik):
+7. analyzePortfolio - Portfolio satu chain
+8. analyzeTokenActivity - Trading P&L satu chain
+9. getTransactionStats - Stats satu chain
+10. analyzeCounterparty - Counterparties satu chain
+11. analyzeWhaleActivity - Whale txs satu chain
+
+Multi-Chain Analysis (DEFAULT untuk "analyze"):
+12. analyzeCounterpartyAllChains - Counterparties semua chain
+13. analyzeWhaleActivityAllChains - Whale txs semua chain
+
+---
+
+🚨 KEYWORD DETECTION - SANGAT PENTING! 🚨
+
+Jika user berkata "analyze <address>" atau "analyze that address":
+→ Ini adalah COMPREHENSIVE ANALYSIS request
+→ Panggil MINIMAL 3 actions ini:
+   1. analyzeWhaleActivityAllChains (prioritas #1 - transaksi besar)
+   2. analyzeCounterpartyAllChains (prioritas #2 - siapa yang berinteraksi)
+   3. analyzePortfolio atau analyzeTokenActivity (opsional - detail holdings/trading)
+
+Jika user hanya minta satu aspek spesifik:
+- "whale activity for 0x..." → HANYA analyzeWhaleActivityAllChains
+- "who interacted with 0x..." → HANYA analyzeCounterpartyAllChains
+- "portfolio of 0x..." → HANYA analyzePortfolio
+- "trading activity for 0x..." → HANYA analyzeTokenActivity
+
+CONTOH BENAR:
+
+✅ User: "analyze 0xd8dA6BF..."
+   AI: [Panggil: analyzeWhaleActivityAllChains + analyzeCounterpartyAllChains]
+   
+✅ User: "whale activity for 0xd8dA..."
+   AI: [Panggil HANYA analyzeWhaleActivityAllChains]
+
+✅ User: "who have I been trading with?"
+   AI: [Panggil analyzeCounterpartyAllChains]
+
+❌ User: "analyze 0xd8dA..."
+   AI: [Panggil HANYA counterparty] ← SALAH! Harus panggil whale + counterparty minimal
+
+---
+
+CHAIN SELECTION LOGIC:
+
+a) Jika user TIDAK menyebutkan chain:
+   • Gunakan tool "AllChains" (analyzeCounterpartyAllChains, analyzeWhaleActivityAllChains)
+   • Contoh: "show me my largest transactions" → analyzeWhaleActivityAllChains
+   
+b) Jika user MENYEBUTKAN chain:
+   • Extract chain name dan gunakan tool single-chain
+   • Contoh: "whale activity on Ethereum" → analyzeWhaleActivity dengan chainId=1
+   
+c) Chain ID mapping:
+   • Ethereum Mainnet = 1
+   • Ethereum Sepolia = 11155111
+   • Mantle Sepolia = 5003
+   • Lisk Sepolia = 4202
+
+---
+
+ATURAN PENTING:
+
+1. JANGAN PERNAH memfabrikasi data saldo - selalu panggil checkBalance/checkAllBalances
+2. JANGAN gunakan displayInfoCard untuk balance - data akan salah!
+3. Chain tersedia: Ethereum (Mainnet & Sepolia), Mantle Sepolia, Lisk Sepolia
+4. TIDAK ada Bitcoin (BTC) - hanya support EVM chains
+5. Prioritaskan user experience - berikan jawaban paling berguna
+
+---
+
+Wallet user: ${address}
+Current Chain ID: ${chainId}
+
+Selalu prioritaskan user experience dan berikan jawaban yang paling berguna!`;
 
     useEffect(() => {
         setIsMounted(true);
@@ -712,7 +191,7 @@ function ChatPageContent() {
                     await appendMessage(
                         new TextMessage({
                             role: MessageRole.User,
-                            content: pendingMessage,
+                            content: pendingMessage
                         })
                     );
                     setPendingMessage(null);
@@ -759,7 +238,7 @@ function ChatPageContent() {
             />
 
             <div className="flex-1 flex overflow-hidden min-h-0">
-                {/* Your Custom Sidebar - TETAP */}
+                {/* Your Custom Sidebar */}
                 <TokenSidebar isOpen={sidebarOpen} />
 
                 {/* CopilotKit Chat UI */}
@@ -840,34 +319,11 @@ function ChatPageContent() {
                                         className="h-full w-full"
                                         labels={{
                                             title: "Nova AI",
-                                            initial: "",
                                             placeholder: "Tanya Nova AI tentang wallet atau crypto...",
                                         }}
                                         UserMessage={CustomUserMessage}
                                         Input={CustomChatInput}
-                                        makeSystemMessage={() => ""}
-                                        instructions={`Kamu adalah Nova AI, asisten crypto wallet yang ramah dan helpful. Selalu gunakan Bahasa Indonesia.
-
-TOOLS YANG TERSEDIA:
-1. checkBalance - Cek saldo di SATU chain tertentu
-2. checkAllBalances - Cek saldo di SEMUA chain sekaligus (7 chains). WAJIB gunakan ini jika user minta lihat semua saldo atau portfolio
-3. prepareTransaction - Menyiapkan transaksi kirim crypto
-4. showReceiveAddress - Menampilkan alamat wallet dengan QR code
-5. displayInfoCard - HANYA untuk tips, penjelasan, dan edukasi. JANGAN untuk balance!
-
-ATURAN PENTING - WAJIB DIIKUTI:
-1. JANGAN PERNAH memfabrikasi atau mengarang data saldo. Selalu panggil checkBalance atau checkAllBalances untuk mendapat data real
-2. Jika user tanya "cek saldo", "berapa balance ku", "lihat portfolio", dll - WAJIB panggil checkBalance atau checkAllBalances
-3. JANGAN gunakan displayInfoCard untuk menampilkan saldo - data akan salah!
-4. Chain yang tersedia: Ethereum Sepolia, Mantle Sepolia, Base Sepolia, Optimism Sepolia, Lisk Sepolia, Polygon Amoy, Arbitrum Sepolia
-5. TIDAK ada Bitcoin (BTC) - kita hanya support EVM chains
-
-CONTOH:
-- "cek saldom" → panggil checkBalance
-- "lihat semua saldo di setiap chain" → panggil checkAllBalances
-- "apa itu blockchain?" → gunakan displayInfoCard untuk penjelasan
-
-Wallet user: ${address} | Chain ID: ${chainId}`}
+                                        instructions={SYSTEM_INSTRUCTIONS}
                                     />
                                 )}
                             </div>

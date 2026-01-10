@@ -54,16 +54,77 @@ const EXCHANGE_ADDRESSES = new Set([
   '0xd793281182a0e3e023116004778f45c29fc14f19',
 ]);
 
+
 /**
  * Analyze whale activity (large transactions)
  */
 export class WhaleAggregator {
+
+
   private readonly WEI_TO_ETH = 1_000_000_000_000_000_000;
-  
+
   constructor(
     private client: BlockchainClient,
     private whaleThresholdUSD: number = 100000 // $100k default
-  ) {}
+  ) { }
+
+  /**
+ * PERFORMANCE FIX: Pre-fetch prices for top N most active tokens only
+ */
+  private async prefetchTopTokenPrices(
+    transactions: Transaction[],
+    timeframeStart: number,
+    timeframeEnd: number,
+    limit: number = 10
+  ): Promise<Map<string, number>> {
+    const priceCache = new Map<string, number>();
+
+    // Count token occurrences
+    const tokenCounts = new Map<string, number>();
+
+    for (const tx of transactions) {
+      const timestamp = parseInt(tx.timeStamp);
+      if (timestamp < timeframeStart || timestamp > timeframeEnd) continue;
+
+      if (tx.txType === 'ERC20' && tx.contractAddress) {
+        tokenCounts.set(
+          tx.contractAddress,
+          (tokenCounts.get(tx.contractAddress) || 0) + 1
+        );
+      }
+    }
+
+    // Get top N tokens by transaction count
+    const topTokens = Array.from(tokenCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([addr]) => addr);
+
+    console.log(`   -> Pre-fetching prices for top ${topTokens.length} tokens in whale transactions...`);
+
+    // Pre-fetch prices for top tokens
+    let fetched = 0;
+    for (const tokenAddr of topTokens) {
+      // Get a representative timestamp (use latest transaction with this token)
+      const lastTx = transactions
+        .filter(tx => tx.contractAddress?.toLowerCase() === tokenAddr.toLowerCase())
+        .sort((a, b) => parseInt(b.timeStamp) - parseInt(a.timeStamp))[0];
+
+      if (lastTx) {
+        try {
+          const timestamp = parseInt(lastTx.timeStamp);
+          const price = await this.client.getHistoricalPrice(tokenAddr, timestamp);
+          priceCache.set(tokenAddr.toLowerCase(), price.priceUSD);
+          fetched++;
+        } catch (error) {
+          priceCache.set(tokenAddr.toLowerCase(), 0);
+        }
+      }
+    }
+
+    console.log(`   -> ✅ Pre-fetched ${fetched} token prices`);
+    return priceCache;
+  }
 
   /**
    * Analyze whale transactions for an address
@@ -71,43 +132,70 @@ export class WhaleAggregator {
   async analyzeWhaleActivity(
     address: string,
     transactions: Transaction[],
-    timeframeStart?: number,
-    timeframeEnd?: number
+    timeframeStart: number,
+    timeframeEnd: number
   ): Promise<WhaleAnalysis> {
     const lowerAddress = address.toLowerCase();
-    const now = Math.floor(Date.now() / 1000);
-    
-    console.log(`Detecting whale transactions (threshold: $${this.whaleThresholdUSD})...`);
-    
-    // Identify whale transactions
     const whaleTransactions: WhaleTransaction[] = [];
-    
+
+    console.log(`Detecting whale transactions (threshold: $${this.whaleThresholdUSD})...`);
+
+    // ✅ PERFORMANCE FIX: Pre-fetch prices for top 10 tokens only
+    const tokenPriceCache = await this.prefetchTopTokenPrices(
+      transactions,
+      timeframeStart,
+      timeframeEnd,
+      10 // Only price top 10 most active tokens
+    );
+
+    // Analyze transactions
     for (const tx of transactions) {
       const timestamp = parseInt(tx.timeStamp);
-      
-      // Skip if outside timeframe
-      if (timeframeStart && timestamp < timeframeStart) continue;
-      if (timeframeEnd && timestamp > timeframeEnd) continue;
-      
-      const valueUSD = await this.calculateTransactionValueUSD(tx);
-      
-      if (valueUSD >= this.whaleThresholdUSD) {
-        const direction = tx.from.toLowerCase() === lowerAddress ? 'sent' : 'received';
-        const destinationLabel = this.getAddressLabel(tx.to);
-        
-        let valueNative = 0;
-        let tokenSymbol: string | undefined;
-        let tokenAddress: string | undefined;
-        
-        if (tx.txType === 'ETH') {
-          valueNative = parseFloat(tx.value || '0') / this.WEI_TO_ETH;
-        } else if (tx.txType === 'ERC20' && tx.contractAddress) {
-          const tokenInfo = await this.client.getTokenMetadata(tx.contractAddress);
-          valueNative = parseFloat(tx.value || '0') / Math.pow(10, tokenInfo.decimals);
-          tokenSymbol = tokenInfo.symbol;
-          tokenAddress = tx.contractAddress;
+      if (timestamp < timeframeStart || timestamp > timeframeEnd) continue;
+
+      const isSent = tx.from.toLowerCase() === lowerAddress;
+      const isReceived = tx.to?.toLowerCase() === lowerAddress;
+
+      if (!isSent && !isReceived) continue;
+
+      let valueUSD = 0;
+      let valueNative = 0;
+      let tokenSymbol: string | undefined;
+      let tokenAddress: string | undefined;
+
+      if (tx.txType === 'ETH') {
+        valueNative = parseFloat(tx.value || '0') / this.WEI_TO_ETH;
+        const ethPrice = await this.client.getNativeTokenPrice(timestamp);
+        valueUSD = valueNative * ethPrice;
+        tokenSymbol = this.client.nativeToken;
+      } else if (tx.txType === 'ERC20' && tx.contractAddress) {
+        // ✅ PERFORMANCE FIX: Use cached price if available, skip if not in top 10
+        const cachedPrice = tokenPriceCache.get(tx.contractAddress.toLowerCase());
+
+        if (cachedPrice !== undefined) {
+          // Token is in top 10, calculate value
+          try {
+            const tokenInfo = await this.client.getTokenMetadata(tx.contractAddress);
+            const tokenAmount = parseFloat(tx.value || '0') / Math.pow(10, tokenInfo.decimals);
+            valueUSD = tokenAmount * cachedPrice;
+            valueNative = tokenAmount;
+            tokenSymbol = tokenInfo.symbol;
+            tokenAddress = tx.contractAddress;
+          } catch (error) {
+            // Skip this token if metadata fails
+            continue;
+          }
+        } else {
+          // Token not in top 10, skip pricing (assume not whale-sized)
+          continue;
         }
-        
+      }
+
+      // Only include if above whale threshold
+      if (valueUSD >= this.whaleThresholdUSD) {
+        const direction = isSent ? 'sent' : 'received';
+        const destinationLabel = tx.to ? this.getAddressLabel(tx.to) : undefined;
+
         whaleTransactions.push({
           hash: tx.hash,
           timestamp,
@@ -123,31 +211,50 @@ export class WhaleAggregator {
         });
       }
     }
-    
-    // Sort by value (descending)
+
+    // Sort by value descending
     whaleTransactions.sort((a, b) => b.valueUSD - a.valueUSD);
-    
+
     // Calculate metrics
     const totalWhaleValueUSD = whaleTransactions.reduce((sum, tx) => sum + tx.valueUSD, 0);
-    const largestTransaction = whaleTransactions[0];
-    const numWhaleTransactions = whaleTransactions.length;
-    const averageWhaleTransactionUSD = numWhaleTransactions > 0
-      ? totalWhaleValueUSD / numWhaleTransactions
+    const averageWhaleTransactionUSD = whaleTransactions.length > 0
+      ? totalWhaleValueUSD / whaleTransactions.length
       : 0;
-    
+
+    const largestTransaction = whaleTransactions[0] || null;
+
     // Calculate exchange flows
-    const exchangeFlows = this.calculateExchangeFlows(whaleTransactions);
-    
+    let sentToExchanges = 0;
+    let receivedFromExchanges = 0;
+
+    for (const tx of whaleTransactions) {
+      if (tx.direction === 'sent' && tx.destinationLabel) {
+        sentToExchanges += tx.valueUSD;
+      } else if (tx.direction === 'received' && tx.from) {
+        const fromLabel = this.getAddressLabel(tx.from);
+        if (fromLabel) {
+          receivedFromExchanges += tx.valueUSD;
+        }
+      }
+    }
+
+    const netExchangeFlow = sentToExchanges - receivedFromExchanges;
+
     return {
       address,
-      timeframeStart: timeframeStart || (transactions[0] ? parseInt(transactions[0].timeStamp) : now),
-      timeframeEnd: timeframeEnd || now,
-      whaleTransactions,
+      timeframeStart,
+      timeframeEnd,
+      whaleThresholdUSD: this.whaleThresholdUSD,
+      numWhaleTransactions: whaleTransactions.length,
       totalWhaleValueUSD,
-      largestTransaction,
-      numWhaleTransactions,
       averageWhaleTransactionUSD,
-      exchangeFlows
+      largestTransaction,
+      whaleTransactions: whaleTransactions.slice(0, 20),
+      exchangeFlows: {
+        sentToExchanges,
+        receivedFromExchanges,
+        netExchangeFlow
+      }
     };
   }
 
@@ -156,7 +263,7 @@ export class WhaleAggregator {
    */
   private async calculateTransactionValueUSD(tx: Transaction): Promise<number> {
     const timestamp = parseInt(tx.timeStamp);
-    
+
     if (tx.txType === 'ETH') {
       const ethAmount = parseFloat(tx.value || '0') / this.WEI_TO_ETH;
       const ethPrice = await this.client.getNativeTokenPrice(timestamp);
@@ -171,7 +278,7 @@ export class WhaleAggregator {
         return 0;
       }
     }
-    
+
     return 0;
   }
 
@@ -180,37 +287,37 @@ export class WhaleAggregator {
    */
   private getAddressLabel(address: string): string | undefined {
     const lowerAddr = address.toLowerCase();
-    
+
     if (EXCHANGE_ADDRESSES.has(lowerAddr)) {
       // Determine which exchange
       if (lowerAddr.startsWith('0x3f5c') || lowerAddr.startsWith('0xd551') ||
-          lowerAddr.startsWith('0x5642') || lowerAddr.startsWith('0x0681') ||
-          lowerAddr.startsWith('0xfe9e') || lowerAddr.startsWith('0x4e9c') ||
-          lowerAddr.startsWith('0xbe0e') || lowerAddr.startsWith('0xf977') ||
-          lowerAddr.startsWith('0x28c6') || lowerAddr.startsWith('0x21a3') ||
-          lowerAddr.startsWith('0xdfd5') || lowerAddr.startsWith('0x56ed') ||
-          lowerAddr.startsWith('0x9696') || lowerAddr.startsWith('0x4d9f') ||
-          lowerAddr.startsWith('0xd88b') || lowerAddr.startsWith('0x7dfe') ||
-          lowerAddr.startsWith('0x345d') || lowerAddr.startsWith('0xc3c8')) {
+        lowerAddr.startsWith('0x5642') || lowerAddr.startsWith('0x0681') ||
+        lowerAddr.startsWith('0xfe9e') || lowerAddr.startsWith('0x4e9c') ||
+        lowerAddr.startsWith('0xbe0e') || lowerAddr.startsWith('0xf977') ||
+        lowerAddr.startsWith('0x28c6') || lowerAddr.startsWith('0x21a3') ||
+        lowerAddr.startsWith('0xdfd5') || lowerAddr.startsWith('0x56ed') ||
+        lowerAddr.startsWith('0x9696') || lowerAddr.startsWith('0x4d9f') ||
+        lowerAddr.startsWith('0xd88b') || lowerAddr.startsWith('0x7dfe') ||
+        lowerAddr.startsWith('0x345d') || lowerAddr.startsWith('0xc3c8')) {
         return 'Binance';
       } else if (lowerAddr.startsWith('0x2f7e') || lowerAddr.startsWith('0xa9d1') ||
-                 lowerAddr.startsWith('0x7769') || lowerAddr.startsWith('0x7c19') ||
-                 lowerAddr.startsWith('0x95a9') || lowerAddr.startsWith('0xb739') ||
-                 lowerAddr.startsWith('0x5038') || lowerAddr.startsWith('0xddfa') ||
-                 lowerAddr.startsWith('0x3cd7') || lowerAddr.startsWith('0xb5d8') ||
-                 lowerAddr.startsWith('0xeb26') || lowerAddr.startsWith('0x7166')) {
+        lowerAddr.startsWith('0x7769') || lowerAddr.startsWith('0x7c19') ||
+        lowerAddr.startsWith('0x95a9') || lowerAddr.startsWith('0xb739') ||
+        lowerAddr.startsWith('0x5038') || lowerAddr.startsWith('0xddfa') ||
+        lowerAddr.startsWith('0x3cd7') || lowerAddr.startsWith('0xb5d8') ||
+        lowerAddr.startsWith('0xeb26') || lowerAddr.startsWith('0x7166')) {
         return 'Coinbase';
       } else if (lowerAddr.startsWith('0x267b') || lowerAddr.startsWith('0xfa52') ||
-                 lowerAddr.startsWith('0x53d2') || lowerAddr.startsWith('0x89e5') ||
-                 lowerAddr.startsWith('0xe853') || lowerAddr.startsWith('0x0a86') ||
-                 lowerAddr.startsWith('0xe92d') || lowerAddr.startsWith('0x2910')) {
+        lowerAddr.startsWith('0x53d2') || lowerAddr.startsWith('0x89e5') ||
+        lowerAddr.startsWith('0xe853') || lowerAddr.startsWith('0x0a86') ||
+        lowerAddr.startsWith('0xe92d') || lowerAddr.startsWith('0x2910')) {
         return 'Kraken';
       } else if (lowerAddr.startsWith('0x0d07') || lowerAddr.startsWith('0x1c4b') ||
-                 lowerAddr.startsWith('0xd793')) {
+        lowerAddr.startsWith('0xd793')) {
         return 'Gate.io';
       }
     }
-    
+
     return undefined;
   }
 
@@ -224,11 +331,11 @@ export class WhaleAggregator {
   } {
     let sentToExchanges = 0;
     let receivedFromExchanges = 0;
-    
+
     for (const tx of whaleTransactions) {
-      const isExchange = tx.destinationLabel && 
+      const isExchange = tx.destinationLabel &&
         ['Binance', 'Coinbase', 'Kraken', 'Gate.io'].includes(tx.destinationLabel);
-      
+
       if (isExchange) {
         if (tx.direction === 'sent') {
           sentToExchanges += tx.valueUSD;
@@ -237,7 +344,7 @@ export class WhaleAggregator {
         }
       }
     }
-    
+
     return {
       sentToExchanges,
       receivedFromExchanges,

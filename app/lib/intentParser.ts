@@ -2,6 +2,7 @@ export type Intent =
     | "GET_BALANCE"
     | "SEND"
     | "SWAP"
+    | "ANALYZE"
     | "UNKNOWN";
 
 export type ParsedIntent = {
@@ -13,6 +14,7 @@ export type ParsedIntent = {
         toAddress?: string;
         chainId?: number;
         chainName?: string;
+        analysisType?: 'whale' | 'counterparty' | 'portfolio' | 'comprehensive';
     };
 };
 
@@ -34,12 +36,16 @@ const chainKeywords: Record<number, string[]> = {
 // Update tokens for Mantle ecosystem
 const tokenKeywords: Record<string, string[]> = {
     MNT: ["mnt", "mantle"],
-    ETH: ["eth", "ethereum"], // WETH on Mantle is common, but keep ETH for simplicity
+    ETH: ["eth", "ethereum"],
     USDT: ["usdt", "tether"],
     USDC: ["usdc", "circle"],
 };
 
-const ADDRESS_REGEX = /0x[a-fA-F0-9]{40}/;
+// ---------------------------------------------------------
+// FIX: Make 0x optional here so we capture invalid addresses
+// and let the Validator fail them, instead of the AI fixing them.
+// ---------------------------------------------------------
+const ADDRESS_REGEX = /(?:0x)?[a-fA-F0-9]{40}/; 
 const AMOUNT_REGEX = /(\d+(\.\d+)?)/;
 
 const containsKeywords = (text: string, keywords: string[]) =>
@@ -76,15 +82,34 @@ export const parseIntent = (message: string): ParsedIntent => {
 
     let intent: Intent = "UNKNOWN";
     let confidence = 0.3;
+    let analysisType: ParsedIntent['entities']['analysisType'] = undefined;
 
-    if (/saldo|balance|cek saldo|berapa/i.test(lowerMessage)) {
+    // 1. Check for Analysis/Search Intents (High Priority)
+    if (/whale|paus|big holder/i.test(lowerMessage)) {
+        intent = "ANALYZE";
+        analysisType = 'whale';
+        confidence = 0.95;
+    } else if (/counterparty|interact|who did .* transact/i.test(lowerMessage)) {
+        intent = "ANALYZE";
+        analysisType = 'counterparty';
+        confidence = 0.95;
+    } else if (/portfolio|holdings|assets|kekayaan/i.test(lowerMessage)) {
+        intent = "ANALYZE";
+        analysisType = 'portfolio';
+        confidence = 0.95;
+    } else if (/analyze|search|scan|track|pantau/i.test(lowerMessage)) {
+        intent = "ANALYZE";
+        analysisType = 'comprehensive'; 
+        confidence = 0.85;
+    }
+    // 2. Existing Intents
+    else if (/saldo|balance|cek saldo|berapa/i.test(lowerMessage)) {
         intent = "GET_BALANCE";
         confidence = 0.95;
     } else if (/kirim|send|transfer/i.test(lowerMessage)) {
         intent = "SEND";
         confidence = 0.9;
     } else if (toAddress && amount) {
-        // Implicit SEND intent: if message contains amount and address
         intent = "SEND";
         confidence = 0.8;
     } else if (/swap|tukar|convert/i.test(lowerMessage)) {
@@ -101,6 +126,7 @@ export const parseIntent = (message: string): ParsedIntent => {
             toAddress,
             chainId,
             chainName,
+            analysisType,
         },
     };
 };

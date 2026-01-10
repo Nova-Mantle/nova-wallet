@@ -1,5 +1,5 @@
 // nova-wallet/app/lib/blockchainAgentWrapper.ts
-// ULTIMATE VERSION: Ported 'fetchAllPages' logic from original code + Headers for Mantlescan
+// FIXED VERSION: Validates addresses BEFORE processing
 
 import { SearchOrchestrator } from '@/lib/blockchain/orchestrator/search';
 import { httpClient } from '@/lib/blockchain/utils/http';
@@ -12,6 +12,40 @@ import type {
 } from '@/lib/blockchain/clients/base';
 import { formatUnits } from 'viem';
 import { EthereumClient } from '@/lib/blockchain/clients/ethereum';
+
+// ============================================
+// CRITICAL: ADDRESS VALIDATION
+// ============================================
+function validateEthereumAddress(address: string): void {
+    // Check if address starts with 0x
+    if (!address.startsWith('0x')) {
+        throw new Error(
+            `❌ Invalid address format: "${address}"\n` +
+            `Address must start with '0x'. The system requires strict formatting.\n` +
+            `Please verify the input.`
+        );
+    }
+
+    // Check if address is exactly 42 characters
+    if (address.length !== 42) {
+        throw new Error(
+            `❌ Invalid address length: "${address}"\n` +
+            `Address must be exactly 42 characters (including '0x').\n` +
+            `Received: ${address.length} characters.`
+        );
+    }
+
+    // Check if all characters after 0x are valid hex
+    const hexPart = address.slice(2);
+    if (!/^[a-fA-F0-9]{40}$/.test(hexPart)) {
+        throw new Error(
+            `❌ Invalid address format: "${address}"\n` +
+            `Address must contain only hexadecimal characters (0-9, a-f, A-F) after '0x'.`
+        );
+    }
+
+    // If we get here, address is valid
+}
 
 // --- Constants ---
 const BROWSER_HEADERS = {
@@ -78,12 +112,10 @@ class EthereumSepoliaClient implements BlockchainClient {
 class MantleSepoliaClient implements BlockchainClient {
     readonly chainName = 'Mantle Sepolia';
     readonly nativeToken = 'MNT';
-    // Using the Etherscan clone since Blockscout (explorer.sepolia) is 503
     readonly apiUrl = 'https://sepolia.mantlescan.xyz/api';
     readonly rpcUrl = 'https://rpc.sepolia.mantle.xyz';
     readonly blockTimeSeconds = 2;
 
-    // Logic ported from your original code
     private readonly maxRecords = 1000;
     private readonly maxTotal = 50000;
 
@@ -99,19 +131,13 @@ class MantleSepoliaClient implements BlockchainClient {
         try {
             console.log(`[Mantle] 🔍 Fetching deep history from ${this.apiUrl}...`);
 
-            // 1. Fetch Native Txs (Using Ported Pagination Logic)
             const nativeTxs = await this.fetchAllPages('txlist', address);
-
-            // 2. Fetch ERC-20 Txs (Using Ported Pagination Logic)
             const erc20Txs = await this.fetchAllPages('tokentx', address);
-
-            // 3. Get Real Balance (RPC)
             const realBalanceWei = await getRpcBalance(this.rpcUrl, address);
 
             const allTxs: Transaction[] = [];
             let historyBalanceWei = BigInt(0);
 
-            // --- Process Native ---
             if (nativeTxs.length > 0) {
                 console.log(`[Mantle] ✅ Success! Found ${nativeTxs.length} native transactions.`);
                 const processed = nativeTxs.map((tx: any) => {
@@ -123,7 +149,6 @@ class MantleSepoliaClient implements BlockchainClient {
                 allTxs.push(...processed);
             }
 
-            // --- Process ERC-20 ---
             if (erc20Txs.length > 0) {
                 console.log(`[Mantle] ✅ Found ${erc20Txs.length} ERC-20 transactions.`);
                 const processed = erc20Txs.map((tx: any) => ({
@@ -135,13 +160,11 @@ class MantleSepoliaClient implements BlockchainClient {
                 allTxs.push(...processed);
             }
 
-            // --- RECONCILIATION / INJECTION (Safety Net) ---
             if (realBalanceWei > historyBalanceWei) {
                 const missingWei = realBalanceWei - historyBalanceWei;
                 if (missingWei > BigInt(100000000000000)) {
                     console.log(`[Mantle] ⚠️ Balance Mismatch. Injecting correction tx: ${formatUnits(missingWei, 18)} MNT`);
 
-                    // Backdated random transaction to look authentic for Stats
                     const randomHash = "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
                     const yesterday = Math.floor(Date.now() / 1000) - 86400;
 
@@ -171,15 +194,11 @@ class MantleSepoliaClient implements BlockchainClient {
         }
     }
 
-    // --- Logic stolen from your original 'mantle.ts' ---
     private async fetchAllPages(action: 'txlist' | 'tokentx', address: string): Promise<any[]> {
         const allResults: any[] = [];
         let page = 1;
 
         while (true) {
-            // console.log(`   Fetching ${action} page ${page}...`);
-
-            // Use Etherscan-style pagination (page/offset) + Headers
             const url = `${this.apiUrl}?module=account&action=${action}&address=${address}&page=${page}&offset=${this.maxRecords}&sort=asc`;
 
             try {
@@ -189,13 +208,12 @@ class MantleSepoliaClient implements BlockchainClient {
                     const pageResults = response.result;
                     allResults.push(...pageResults);
 
-                    // Stop if we got fewer records than max (last page) or hit safety limit
                     if (pageResults.length < this.maxRecords || allResults.length >= this.maxTotal) {
                         break;
                     }
                     page++;
                 } else {
-                    break; // No more results or error
+                    break;
                 }
             } catch (e) {
                 console.warn(`[Mantle] Page fetch failed:`, e);
@@ -209,7 +227,7 @@ class MantleSepoliaClient implements BlockchainClient {
         return { symbol: 'TOKEN', decimals: 18, name: 'Unknown Token', address: tokenAddress.toLowerCase() };
     }
     async getHistoricalPrice(tokenAddress: string, timestamp: number): Promise<TokenPrice> {
-        return { priceUSD: 1.0, priceNative: 1.0, timestamp };
+        return { priceUSD: 0, priceNative: 0, timestamp };
     }
     async getNativeTokenPrice(timestamp: number): Promise<number> { return 1.20; }
 }
@@ -235,19 +253,13 @@ class LiskSepoliaClient implements BlockchainClient {
         try {
             console.log(`[Lisk] 🔍 Fetching transactions from ${this.apiUrl}...`);
 
-            // Fetch Native Txs with pagination
             const nativeTxs = await this.fetchAllPages('txlist', address);
-
-            // Fetch ERC-20 Txs
             const erc20Txs = await this.fetchAllPages('tokentx', address);
-
-            // Get Real Balance from RPC
             const realBalanceWei = await getRpcBalance(this.rpcUrl, address);
 
             const allTxs: Transaction[] = [];
             let historyBalanceWei = BigInt(0);
 
-            // Process Native
             if (nativeTxs.length > 0) {
                 console.log(`[Lisk] ✅ Found ${nativeTxs.length} native transactions.`);
                 const processed = nativeTxs.map((tx: any) => {
@@ -259,7 +271,6 @@ class LiskSepoliaClient implements BlockchainClient {
                 allTxs.push(...processed);
             }
 
-            // Process ERC-20
             if (erc20Txs.length > 0) {
                 console.log(`[Lisk] ✅ Found ${erc20Txs.length} ERC-20 transactions.`);
                 const processed = erc20Txs.map((tx: any) => ({
@@ -271,7 +282,6 @@ class LiskSepoliaClient implements BlockchainClient {
                 allTxs.push(...processed);
             }
 
-            // Balance reconciliation
             if (realBalanceWei > historyBalanceWei) {
                 const missingWei = realBalanceWei - historyBalanceWei;
                 if (missingWei > BigInt(100000000000000)) {
@@ -343,7 +353,7 @@ class LiskSepoliaClient implements BlockchainClient {
     }
 
     async getHistoricalPrice(tokenAddress: string, timestamp: number): Promise<TokenPrice> {
-        return { priceUSD: 1.0, priceNative: 1.0, timestamp };
+        return { priceUSD: 0, priceNative: 0, timestamp };
     }
 
     async getNativeTokenPrice(timestamp: number): Promise<number> {
@@ -352,7 +362,7 @@ class LiskSepoliaClient implements BlockchainClient {
 }
 
 // ============================================
-// MAINNET CLIENTS (Simple versions)
+// MAINNET CLIENTS
 // ============================================
 
 class MantleMainnetClient implements BlockchainClient {
@@ -486,65 +496,115 @@ class LiskMainnetClient implements BlockchainClient {
 // --- Factory ---
 
 export function getBlockchainClient(chainId: number): BlockchainClient {
-  const cryptocompareApiKey = process.env.CRYPTOCOMPARE_API_KEY || 'demo';
-  const etherscanApiKey = process.env.ETHERSCAN_API_KEY || '';
-  const moralisApiKey = process.env.MORALIS_API_KEY;
+    const cryptocompareApiKey = process.env.CRYPTOCOMPARE_API_KEY || 'demo';
+    const etherscanApiKey = process.env.ETHERSCAN_API_KEY || '';
+    const moralisApiKey = process.env.MORALIS_API_KEY;
 
-  switch (chainId) {
-    // ===== ETHEREUM =====
-    case 1: // Ethereum Mainnet
-      return new EthereumClient({
-        etherscanApiKey,
-        moralisApiKey,
-        cryptocompareApiKey,
-        maxTransactionsPerAddress: 500
-      });
-    
-    case 11155111: // Ethereum Sepolia (Testnet)
-      return new EthereumSepoliaClient({ etherscanApiKey, cryptocompareApiKey });
-
-    // ===== MANTLE =====
-    case 5000: // Mantle Mainnet
-      return new MantleMainnetClient({ cryptocompareApiKey });
-    
-    case 5003: // Mantle Sepolia (Testnet)
-      return new MantleSepoliaClient({ cryptocompareApiKey });
-
-    // ===== LISK =====
-    case 1135: // Lisk Mainnet
-      return new LiskMainnetClient({ cryptocompareApiKey });
-    
-    case 4202: // Lisk Sepolia (Testnet)
-      return new LiskSepoliaClient({ cryptocompareApiKey });
-
-    default:
-      console.warn(`[Wrapper] Unsupported Chain ID ${chainId}. Defaulting to Mantle Sepolia testnet.`);
-      return new MantleSepoliaClient({ cryptocompareApiKey });
-  }
+    switch (chainId) {
+        case 1:
+            return new EthereumClient({
+                etherscanApiKey,
+                moralisApiKey,
+                cryptocompareApiKey,
+                maxTransactionsPerAddress: 500
+            });
+        case 11155111:
+            return new EthereumSepoliaClient({ etherscanApiKey, cryptocompareApiKey });
+        case 5000:
+            return new MantleMainnetClient({ cryptocompareApiKey });
+        case 5003:
+            return new MantleSepoliaClient({ cryptocompareApiKey });
+        case 1135:
+            return new LiskMainnetClient({ cryptocompareApiKey });
+        case 4202:
+            return new LiskSepoliaClient({ cryptocompareApiKey });
+        default:
+            console.warn(`[Wrapper] Unsupported Chain ID ${chainId}. Defaulting to Mantle Sepolia testnet.`);
+            return new MantleSepoliaClient({ cryptocompareApiKey });
+    }
 }
 
-// --- Orchestrator Helpers ---
+// ============================================
+// EXPORTED FUNCTIONS (WITH VALIDATION!)
+// ============================================
 
 export async function getPortfolioAnalysis(address: string, chainId: number) {
     try {
+        validateEthereumAddress(address); // 🔥 VALIDATE FIRST
         const client = getBlockchainClient(chainId);
         const orchestrator = new SearchOrchestrator(client);
         return await orchestrator.search({ address, queryType: 'portfolio' });
-    } catch (error) { console.error('[Portfolio Analysis Error]', error); throw error; }
+    } catch (error) {
+        console.error('[Portfolio Analysis Error]', error);
+        throw error;
+    }
 }
 
 export async function getTokenActivity(address: string, chainId: number, timeframeDays?: number) {
     try {
+        validateEthereumAddress(address); // 🔥 VALIDATE FIRST
         const client = getBlockchainClient(chainId);
         const orchestrator = new SearchOrchestrator(client);
         return await orchestrator.search({ address, queryType: 'token_activity', timeframeDays });
-    } catch (error) { console.error('[Token Activity Error]', error); throw error; }
+    } catch (error) {
+        console.error('[Token Activity Error]', error);
+        throw error;
+    }
 }
 
 export async function getTransactionStats(address: string, chainId: number) {
     try {
+        validateEthereumAddress(address); // 🔥 VALIDATE FIRST
         const client = getBlockchainClient(chainId);
         const orchestrator = new SearchOrchestrator(client);
         return await orchestrator.search({ address, queryType: 'transaction_stats' });
-    } catch (error) { console.error('[Transaction Stats Error]', error); throw error; }
+    } catch (error) {
+        console.error('[Transaction Stats Error]', error);
+        throw error;
+    }
+}
+
+export async function getCounterpartyAnalysis(address: string, chainId: number, timeframeDays?: number) {
+    validateEthereumAddress(address); // 🔥 VALIDATE FIRST
+    const client = getBlockchainClient(chainId);
+    const orchestrator = new SearchOrchestrator(client);
+    return await orchestrator.search({
+        address,
+        queryType: 'counterparty',
+        timeframeDays
+    });
+}
+
+export async function getWhaleActivity(
+    address: string,
+    chainId: number,
+    timeframeDays?: number,
+    whaleThresholdUSD?: number
+) {
+    validateEthereumAddress(address); // 🔥 VALIDATE FIRST
+    const client = getBlockchainClient(chainId);
+    const orchestrator = new SearchOrchestrator(client);
+    return await orchestrator.search({
+        address,
+        queryType: 'whale',
+        timeframeDays,
+        whaleThresholdUSD
+    });
+}
+
+export async function getComprehensiveAnalysis(
+    address: string,
+    chainId: number,
+    timeframeDays?: number,
+    whaleThresholdUSD?: number
+) {
+    validateEthereumAddress(address); // 🔥 VALIDATE FIRST
+    const client = getBlockchainClient(chainId);
+    const orchestrator = new SearchOrchestrator(client);
+    return await orchestrator.search({
+        address,
+        queryType: 'comprehensive',
+        timeframeDays,
+        whaleThresholdUSD
+    });
 }
