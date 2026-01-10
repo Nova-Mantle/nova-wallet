@@ -18,6 +18,10 @@
 6. [Screen Requirements](#screen-requirements)
 7. [Design Principles](#design-principles)
 8. [References & Inspiration](#references-inspiration)
+9. [Success Metrics](#success-metrics)
+10. [Deliverables Expected](#deliverables-expected)
+11. [Out of Scope (Not in MVP)](#out-of-scope-not-in-mvp)
+12. [Future Roadmap](#future-roadmap)
 
 ---
 
@@ -254,167 +258,115 @@ AI: "Slippage itu selisih antara harga yang kamu expect
 
 ---
 
-### Feature 2: Address Intelligence
+### Feature 2: Portfolio Analysis
 
 **Konsep:**
-User mau kirim/swap tapi ga tau "address ini siapa/ngapain". AI kasih **context**.
+User bisa melihat portfolio lengkap wallet mereka, termasuk native token dan ERC-20 tokens, nilai USD, dan profit/loss.
 
-**NOT scam detection** - cuma info biar user paham.
-
-**Example 1: Individual Address**
+**Example 1: Analyze Own Portfolio**
 ```
-User: "Info tentang address 0xABC...789"
+User: "Analisis portfolio aku"
 
-AI: "Address 0xABC...789
+AI: [Shows PortfolioCard]
     
-    📊 Activity:
-    • Active trader (30 txs last week)
-    • Frequently swaps on Uniswap
-    • Last transaction: 2 hours ago
+    📊 Portfolio Overview
     
-    💰 Holdings:
-    • 5.2 ETH ($12,500)
-    • 10,000 USDT
-    • 50 LINK
+    Total Value: $1,247.50
+    📈 +8.2% (24h)
     
-    🔗 Interactions:
-    • Top protocols: Uniswap, Aave, Curve
-    • Received from 15 addresses
-    • Sent to 8 addresses
+    Native Token:
+    • 0.35 ETH ($850)
     
-    📍 First seen: Jan 2023
+    Token Holdings:
+    • 250 USDT ($250)
+    • 147 LINK ($147)
     
-    [View on Etherscan →]"
+    Chain: Ethereum Mainnet
 ```
 
-**Example 2: Before Sending**
+**Example 2: Analyze Any Address**
 ```
-User: "Kirim 1 ETH ke 0xDEF...456"
+User: "Analyze address 0xABC...789"
 
-AI: "✋ Hold on, aku cek dulu ya...
+AI: [Shows PortfolioCard for that address]
     
-    Address 0xDEF...456:
-    • NEW address (created 2 days ago)
-    • Only 1 previous transaction
-    • No DeFi interactions yet
+    📊 Portfolio: 0xABC...789
     
-    ⚠️ This is a new address. Double-check you have
-       the correct address before sending!
+    Total Value: $12,500
     
-    [Cancel] [Proceed Anyway]"
+    Holdings breakdown...
 ```
 
 **Data Sources:**
-- Blockchain explorers (Etherscan, etc)
-- Transaction history analysis
-- Protocol interaction tracking
-- Token holdings
+- Multi-chain balance API
+- Token price feeds
+- Blockchain RPC endpoints
 
 **UI Components:**
-- Address info card (expandable)
-- Activity timeline
-- Holdings breakdown
-- Warning badges (new address, inactive, etc)
+- PortfolioCard (total value, token list, 24h change)
+- MultiChainBalanceCard (all chains overview)
+
+> **📌 Note:** Advanced Address Intelligence (activity tracking, protocol interactions, risk analysis) planned for **Phase 2 - Intelligence Layer**.
 
 ---
 
 ### Feature 3: On-Chain Search
 
 **Konsep:**
-User bisa tanya **apa aja** tentang on-chain data. AI cari & kasih answer.
+User bisa query data on-chain untuk wallet mereka seperti aktivitas trading dan statistik transaksi.
 
 **Example Queries:**
 
-**A. Token Research**
+**A. Token Activity (Trading P&L)**
 ```
-User: "Token apa yang address 0xABC...789 beli minggu ini?"
+User: "Profit aku berapa?"
 
-AI: "Address ini beli:
+AI: [Shows TokenActivityCard]
     
-    1. PEPE - 1M tokens ($2,500)
-       • Bought 3 days ago
-       • Current value: $2,800 (+12%)
+    📊 Trading Activity Summary
     
-    2. SHIB - 50M tokens ($1,200)
-       • Bought 5 days ago
-       • Current value: $1,150 (-4%)
+    Total Tokens Traded: 5
+    Total P&L: +$260 (+5.8%)
     
-    3. DOGE - 5K tokens ($800)
-       • Bought yesterday
-       • Current value: $810 (+1%)
+    Top Gainers:
+    • PEPE: +12% ($300 profit)
+    • LINK: +8% ($120 profit)
     
-    Total invested: $4,500
-    Current value: $4,760
-    P&L: +$260 (+5.8%)"
+    Top Losers:
+    • SHIB: -4% ($50 loss)
+    
+    Chain: Ethereum
 ```
 
-**B. Whale Watching**
+**B. Transaction Statistics**
 ```
-User: "Siapa top 10 ETH whale yang aktif hari ini?"
+User: "Berapa gas yang sudah aku habiskan?"
 
-AI: "Top 10 ETH whales (by transaction volume today):
+AI: [Shows TransactionStatsCard]
     
-    1. 0x742...d4e - 5,000 ETH moved ($12M)
-    2. 0x28c...7ef - 3,200 ETH moved ($7.8M)
-    3. 0x1f9...a2b - 2,800 ETH moved ($6.9M)
-    ...
+    ⛽ Transaction Statistics
     
-    💡 Interesting: Address #1 just moved ETH to Binance
-       (possible selling pressure?)
+    Total Transactions: 245
+    Total Gas Spent: 0.35 ETH ($850)
     
-    [View Full List →]"
-```
-
-**C. NFT Analysis**
-```
-User: "10 NFT wash traders teratas minggu ini siapa?"
-
-AI: "Top 10 suspected NFT wash traders (last 7 days):
+    Average Gas per Tx: $3.47
+    Most Active Day: Monday
     
-    1. 0xabc...123
-       • 45 suspicious trades (same NFT back & forth)
-       • Collections: Bored Ape, Pudgy Penguins
-       • Volume: $2.3M
-    
-    2. 0xdef...456
-       • 32 suspicious trades
-       • Collections: Azuki, Doodles
-       • Volume: $1.8M
-    
-    ...
-    
-    ⚠️ Note: This is based on pattern analysis.
-       Not definitive proof of wash trading.
-    
-    [View Details →]"
+    Last 30 Days:
+    • 45 transactions
+    • 0.08 ETH gas spent
 ```
 
-**D. Contract Mentions**
-```
-User: "Contract mana aja yang menyebut address 0xABC...789?"
-
-AI: "Found 12 contracts mentioning this address:
-    
-    🔵 DeFi Protocols:
-    • Uniswap V3 Router (5 interactions)
-    • Aave Lending Pool (3 interactions)
-    • Curve Finance (2 interactions)
-    
-    🟣 Token Contracts:
-    • USDT (approved spender)
-    • DAI (approved spender)
-    
-    🟢 NFT Contracts:
-    • Bored Ape Yacht Club (owns token #4523)
-    
-    [View All Chains →]"
-```
+**Data Sources:**
+- Blockchain RPC endpoints
+- Transaction history API
+- Token price feeds
 
 **UI Components:**
-- Search results list
-- Data tables (sortable, filterable)
-- Charts & graphs (for trends)
-- External links (Etherscan, Dextools, etc)
+- TokenActivityCard (trading summary, P&L)
+- TransactionStatsCard (gas usage, tx count)
+
+> **📌 Note:** Advanced On-Chain Search (whale watching, NFT analysis, contract mentions) planned for **Phase 2 - Intelligence Layer**.
 
 ---
 
@@ -481,83 +433,107 @@ AI: "Gas fee saat ini:
 
 ---
 
-### Feature 5: Wallet Paylink (QRIS → Crypto)
+### Feature 5: Wallet Paylink (Fiat → Crypto)
 
 **Konsep:**
-Freelancer buat payment link, client bayar Rupiah via QRIS, freelancer terima crypto.
+Freelancer buat payment link, client bayar fiat, freelancer terima crypto.
+
+**Dual Payment Method:**
+- 🇮🇩 **Indonesia:** QRIS via Midtrans (Rupiah → Crypto)
+- 🌐 **Global:** Transak (USD/EUR/etc → Crypto)
 
 **Create via Chat:**
 ```
-User: "Buat paylink 100 ribu"
+User: "Buat paylink 0.1 ETH"
 
-AI: "Oke! Mau terima crypto apa?
-    [USDT] [ETH] [SOL] [BTC]"
-
-User: "USDT"
-
-AI: "Perfect! Paylink created:
+AI: [Shows CreatePaymentForm]
     
-    💰 Client bayar: Rp 100,000
-    💵 Kamu terima: ~6.5 USDT
-    💸 Fee: 4.5% (Rp 4,500)
-    ⏰ Valid: 24 jam
+    💳 Create Payment Link
+    
+    Amount: 0.1
+    Token: [ETH ▼]
+    Network: [Ethereum ▼]
+    Wallet Penerima: 0xABC...789
+    
+    [Generate Payment Link]
+```
+
+**After Creation:**
+```
+AI: [Shows PaymentStatusCard]
+    
+    ✨ Your Paylink is Ready!
     
     ┌─────────────┐
     │  QR CODE    │
     └─────────────┘
     
-    Link: nova.link/pay/ABC123
+    Link: nova.app/pay/ABC123
     
-    [Copy Link] [Share WhatsApp] [Download QR]"
+    Amount: 0.1 ETH (~$250)
+    Status: Waiting for payment
+    
+    [Copy Link] [Open Link]
 ```
 
-**Client Experience:**
+**Client Experience (Indonesia):**
 ```
-[Client opens link]
+[Client opens link → Detected as Indonesia]
 
 ┌─────────────────────────┐
 │ Bayar ke @wildanniam    │
 │                         │
-│ Amount: Rp 100,000     │
+│ Amount: Rp 3,850,000    │
+│ You receive: 0.1 ETH    │
 │                         │
-│ [QR CODE]              │
+│ [QR CODE - QRIS]        │
 │                         │
-│ Scan dengan:           │
-│ BCA • BRI • Mandiri    │
-│ GoPay • OVO • Dana     │
+│ Scan dengan:            │
+│ GoPay • OVO • Dana      │
+│ BCA • BRI • Mandiri     │
+└─────────────────────────┘
+```
+
+**Client Experience (Global):**
+```
+[Client opens link → Non-Indonesia]
+
+┌─────────────────────────┐
+│ Pay to @wildanniam      │
 │                         │
-│ [Buka App Banking]     │
+│ Amount: $250 USD        │
+│ You receive: 0.1 ETH    │
+│                         │
+│ [Transak Widget]        │
+│ Card • Bank Transfer    │
+│ Apple Pay • Google Pay  │
 └─────────────────────────┘
 ```
 
 **After Payment:**
 ```
-[User gets notification]
-
 Nova AI: "💰 Payment received!
           
-          Converting Rp 100,000 → USDT...
+          Converting fiat → 0.1 ETH...
           Est. 3-5 minutes
           
           [Track Status →]"
 
-[3 minutes later]
+[Processing complete]
 
 Nova AI: "✅ Done!
           
-          6.5 USDT delivered to your wallet
-          
-          From: +6281234...
+          0.1 ETH delivered to your wallet
           Tx: 0x7d3f2a...
           
           [View Transaction →]"
 ```
 
 **UI Components:**
-- Paylink creation form (in chat)
-- QR code display
-- Payment tracking status
-- Client-facing payment page
+- CreatePaymentForm (in chat)
+- PaymentStatusCard (QR code, link, status)
+- Client-facing payment page (`/pay/[paymentId]`)
+- Real-time status polling
 
 ---
 
@@ -1212,6 +1188,8 @@ Use 8px grid system:
 
 ## 11. OUT OF SCOPE (NOT in MVP)
 
+**Not in Phase 1 (Foundation):**
+
 ❌ Chat history persistence  
 ❌ Multi-language (English only for now)  
 ❌ Voice input  
@@ -1220,11 +1198,70 @@ Use 8px grid system:
 ❌ Social features (share, follow)  
 ❌ Mobile native app (web only)  
 ❌ Browser extension  
+❌ DEX swap aggregator (planned for Phase 2)  
+❌ Advanced address intelligence (planned for Phase 2)  
+❌ Whale watching & NFT analysis (planned for Phase 2)  
 
 **Focus:** Get chat + core features right first.
 
 ---
 
+## 12. FUTURE ROADMAP
+
+### Phase 1: Foundation (Months 1-4) ✅ CURRENT
+
+**Core Capabilities:**
+- AI chat wallet (intent → execution)
+- Send & receive via natural language
+- Wallet connection & portfolio view
+- Transaction preview & gas prediction
+- AI on-chain search (basic - token activity, tx stats)
+- Paylink (fiat → crypto via partners: Midtrans QRIS + Transak)
+- Beta launch & UX validation
+
+**Key Metrics:**
+- Working MVP with chat-first interface
+- Multi-chain support (EVM chains)
+- Fiat on-ramp integration
+
+---
+
+### Phase 2: Intelligence Layer (Months 5-9)
+
+**Advanced AI Features:**
+- Context-before-execution (proactive warnings)
+- Address & risk intelligence
+- AI slippage & cost prediction (advanced ML)
+- Smart recommendations
+- Assisted swap (aggregator-based)
+- Wallet health insights
+- Nova AI API (developer access)
+
+**Key Metrics:**
+- Improved transaction success rate
+- Reduced user errors
+- Developer ecosystem growth
+
+---
+
+### Phase 3: Automation & Distribution (Month 10+)
+
+**Expansion & Automation:**
+- WhatsApp & Telegram execution
+- Smart alerts & automation
+- Conditional & scheduled transactions
+- Gas optimization bot
+- Embedded Nova agent (SDK for dApps)
+- Developer SDK
+- Enterprise partnerships
+
+**Key Metrics:**
+- Cross-platform reach
+- Automated transaction volume
+- Enterprise adoption
+
+---
+
 **Questions?** Contact Product Team.
 
-**Last Updated:** November 30, 2025
+**Last Updated:** January 10, 2026

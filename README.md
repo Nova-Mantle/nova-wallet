@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ⚡ Nova AI: The Intelligent Orchestrator for Lisk
 
-## Getting Started
+> **"The AI Brain for Your Crypto Wallets. Chat, Transact, and Onboard Users Instantly on Lisk."**
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## 🎯 Why Nova AI?
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Nova AI addresses the urgent friction points preventing mass adoption on Lisk and the broader Web3 ecosystem:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+* **Complex UX Barrier:** Traditional wallets require technical knowledge (chains, gas, RPCs). Users want to express *intents* ("Send money to Mom"), not execute *commands*.
+* **On-Ramp Friction in Emerging Markets:** Freelancers and businesses in regions like Indonesia struggle to receive crypto payments from non-crypto clients due to complex exchange processes.
+* **Fragmented Data:** Users suffer from "Tab Fatigue"—switching between Wallet, Etherscan, and Gas Trackers just to make one informed decision.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## 💡 Our Solution: The AI Orchestration Layer
 
-To learn more about Next.js, take a look at the following resources:
+Nova AI is **not a new wallet**. It is an intelligent interface layer that sits on top of your existing wallets (MetaMask, Phantom, etc.), allowing you to interact with the Lisk blockchain using natural language.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+![Nova AI Solution Overview](https://cdn.jsdelivr.net/gh/OfficialNovaAI/asset@main/solution.png)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## 💎 Key Features
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+We have built a suite of AI-powered modules designed for Real-World Utility.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 1. Nova Conversational Interface (Chat-to-Transact)
+
+The core of Nova AI is a chat-first interface powered by LLMs. Instead of navigating complex menus, users simply "chat" with their assets. The AI interprets intents, constructs transactions, and presents a clear preview card for user approval.
+
+* **Natural Language Execution:** Type "Send 10 LSK to 0x489..." or "Check my portfolio balance," and Nova executes it instantly.
+* **Wallet Agnostic:** Works as an orchestrator for your existing MetaMask or EVM wallets.
+* **Context-Aware:** The AI understands context (e.g., distinguishing between "Testnet" and "Mainnet" requests).
+
+### 2. Nova Paylink (Fiat-to-Crypto Bridge)
+
+A "Real World Utility" feature designed for the gig economy. Nova Paylink enables users to create invoices/payment links that accept Fiat but settle in Crypto on Lisk.
+
+* **Global & Local Rails:** Integrated with **Transak** (Global Cards) and **Midtrans** (Indonesian QRIS/Bank Transfer).
+* **Seamless Settlement:** Clients pay in IDR/USD, and the freelancer receives USDT or LSK directly in their wallet.
+* **Instant Generation:** Create a payment link via chat command: *"Create paylink for 0.00000000001 eth"*.
+
+### 3. Predictive Insights & Portfolio Aggregation
+
+Nova AI doesn't just execute; it informs. Before any action, our agents analyze on-chain data to ensure users make optimal decisions.
+
+* **Smart Gas Prediction:** AI analyzes network congestion on Lisk to recommend the best time to transact.
+* **Multi-Chain Portfolio:** Aggregates balances across Lisk and other EVM chains in a single view, eliminating the need to check multiple explorers.
+* **Transaction Simulation:** Prevents errors by showing a human-readable summary of what will happen before you sign.
+
+---
+
+## 🏗️ System Architecture
+
+Nova AI operates on a **"Hexa-Core Agent System"** powered by CopilotKit and Lisk RPC. The architecture ensures that user intents are routed to specific specialized agents for maximum accuracy.
+
+![System Architecture Diagram](https://cdn.jsdelivr.net/gh/OfficialNovaAI/asset@main/architecture.jpeg)
+
+**How it works on Lisk:**
+1. **User Input:** Natural language prompt enters the Router.
+2. **Agent Selection:** Router activates the specific agent (e.g., Paylink Agent for invoices).
+3. **Lisk Interaction:** Agents communicate with Lisk L2 RPC nodes (using viem/wagmi) to fetch data or prepare transaction objects.
+4. **Response:** The UI renders a "Smart Card" (not just text) for the user to confirm the on-chain action.
+
+![How it works](https://cdn.jsdelivr.net/gh/OfficialNovaAI/asset@main/how-it-works.png)
+
+---
+
+## 🗺️ Roadmap
+
+We are building Nova AI with a clear path toward becoming the "Super App" for Lisk interaction.
+
+![Nova AI Roadmap](https://cdn.jsdelivr.net/gh/OfficialNovaAI/asset@main/roadmap.png)
+
+---
+
+## 📊 Beta Tester SUS Score Result
+
+![Nova AI Beta SUS Score](https://cdn.jsdelivr.net/gh/OfficialNovaAI/asset@main/tracktion.png)
