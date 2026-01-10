@@ -975,7 +975,7 @@ function ChatPageContent() {
                                             receive: "Show my wallet address",
                                             swap: "I want to swap tokens",
                                             paylink: "Create a payment link",
-                                            portfolio: "Analyze my portfolio",
+                                            portfolio: "Check my balance on all chains",
                                             search: "Search onchain activity", // This might need a form too, but for now text
                                             slippage: "Predict trade slippage"
                                         };
