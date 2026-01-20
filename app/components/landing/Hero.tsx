@@ -1,50 +1,49 @@
 "use client";
 import { motion } from "framer-motion";
 import { Zap } from "lucide-react";
-import Link from "next/link";
 import Image from "next/image";
 
 export const Hero = () => {
   return (
-    <section className="relative min-h-screen flex items-center pt-20 overflow-hidden">
+    <section className="relative min-h-screen flex items-center pt-20 overflow-hidden bg-white">
       {/* Background Effects */}
-      <div className="absolute inset-0">
-        {/* Purple glow orbs */}
-        <div className="absolute top-1/4 right-1/4 w-[500px] h-[500px] bg-purple-600/30 rounded-full blur-[150px] animate-pulse" />
-        <div className="absolute bottom-1/4 left-1/4 w-[400px] h-[400px] bg-violet-500/20 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }} />
+      {/* Solid top layer to match navbar */}
+      <div className="absolute top-0 left-0 right-0 h-[100px] bg-[#131313]" style={{
+        filter: 'blur(0px)'
+      }} />
 
-        {/* Diagonal purple beam */}
-        <div className="absolute top-0 right-0 w-full h-full overflow-hidden">
-          <div
-            className="absolute -top-20 right-0 w-[600px] h-[800px] bg-gradient-to-b from-purple-600/40 via-purple-700/20 to-transparent"
-            style={{
-              transform: 'rotate(-15deg) translateX(200px)',
-              borderRadius: '0 0 100% 100%'
-            }}
-          />
-        </div>
-      </div>
+      {/* Base gradient layer - with slight blur for smooth edges */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[140%] h-[850px] rounded-b-[100%]" style={{
+        background: 'linear-gradient(180deg, #131313 0%, #131313 75%, #1a0a4d 82%, #3904C8 90%, #6b3dd9 95%, #b8a3f0 98%, #D6C4FF 100%)',
+        filter: 'blur(40px)'
+      }} />
+
+      {/* Blur layer only at the edges/perimeter */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[140%] h-[850px] rounded-b-[100%]" style={{
+        background: 'radial-gradient(ellipse 60% 80% at 50% 20%, transparent 0%, transparent 60%, #3904C8 90%, #8b6dd9 95%, #D6C4FF 100%)',
+        filter: 'blur(60px)'
+      }} />
 
       {/* Hero Decoration Image */}
-      <div className="absolute right-0 top-52 hidden lg:block">
+      <div className="absolute right-0 top-48 hidden lg:block z-100">
         <motion.div
           initial={{ opacity: 0, x: 100 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 1, ease: "easeOut" }}
-          className="relative w-[600px] h-[400px]"
+          className="relative w-[700px] h-[550px]"
         >
           <Image
             src="/hero-decoration.png"
             alt="Hero Decoration"
             fill
-            className="object-contain object-right-top"
+            className="object-contain object-top-right"
             priority
           />
         </motion.div>
       </div>
 
       <div className="container mx-auto px-6 relative z-10">
-        <div className="max-w-3xl">
+        <div className="max-w-3xl -mt-40">
           {/* Main Heading with special typography */}
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
@@ -55,11 +54,35 @@ export const Hero = () => {
             <span className="block text-5xl md:text-[70px] font-normal text-white/90 mb-2" style={{ fontFamily: 'var(--font-bruno-ace)', lineHeight: '100%', letterSpacing: '-0.02em' }}>
               AI-POWERED
             </span>
-            <span className="block text-5xl md:text-[70px] font-normal text-white/90 flex items-center gap-3" style={{ fontFamily: 'var(--font-bruno-ace)', lineHeight: '100%', letterSpacing: '-0.02em' }}>
+            <span className="text-5xl md:text-[70px] font-normal text-white/90 flex items-center gap-6" style={{ fontFamily: 'var(--font-bruno-ace)', lineHeight: '100%', letterSpacing: '-0.02em' }}>
               CRYPTO
-              <span className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500 to-violet-600 shadow-lg shadow-purple-500/30">
-                <Zap className="w-8 h-8 text-white" />
-              </span>
+              <div className="ml-2">
+                {/* Floating Icon - matching SVG design */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                  className="relative"
+                >
+                  {/* Behind icon - rotated purple square */}
+                  <div
+                    className="absolute -left-4 -top-4 w-[56px] h-[56px] rounded-[14px] rotate-[-19deg]"
+                    style={{ background: 'linear-gradient(180deg, #7069EC 0%, #5753DF 100%)' }}
+                  />
+                  {/* Main icon container with glass effect */}
+                  <div
+                    className="relative w-[57px] h-[57px] rounded-[12px] rotate-[-4deg] flex items-center justify-center"
+                    style={{
+                      background: 'linear-gradient(225.82deg, rgba(140, 132, 251, 0.4) 0%, rgba(54, 54, 201, 0.4) 98.6%)',
+                      backdropFilter: 'blur(7px)',
+                      border: '0.72px solid rgba(255, 255, 255, 0.2)',
+                      boxShadow: 'inset 0 1px 0 0 rgba(255, 255, 255, 0.2)'
+                    }}
+                  >
+                    <Zap className="w-7 h-7 text-white" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} />
+                  </div>
+                </motion.div>
+              </div>
             </span>
             <span className="block text-5xl md:text-[70px] font-normal text-white/90" style={{ fontFamily: 'var(--font-bruno-ace)', lineHeight: '100%', letterSpacing: '-0.02em' }}>
               SUPERWALLET
@@ -73,7 +96,7 @@ export const Hero = () => {
             transition={{ duration: 0.8, delay: 0.2 }}
             className="text-lg md:text-xl text-white/60 mb-10 max-w-xl leading-relaxed"
           >
-            Nova is an AI-powered chat interface that lets you send, swap, and explore crypto using natural language on top of your existing wallet
+            Nova is an AI-powered chat interface that helps you interact with crypto through natural language, from sending assets to understanding on-chain activity
           </motion.p>
         </div>
       </div>
