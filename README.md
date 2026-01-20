@@ -3,7 +3,7 @@
 > **"The AI Brain for Your Crypto Wallets. Chat, Transact, and Onboard Users Instantly on Lisk."**
 
 ---
-
+l
 ## 🎯 Why Nova AI?
 
 **"UX Friction is Killing Adoption."** Most Web3 wallets are built for experts, not humans. Users are forced to learn crypto before they can act, leading to three critical failures:

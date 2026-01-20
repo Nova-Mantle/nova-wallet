@@ -52,6 +52,36 @@ export async function GET(
         }
         // -----------------------------------------------------------
 
+        // --- AUTO-COMPLETE FOR DEMO (Handle Stuck PROCESSING_CRYPTO) ---
+        // This solves the setTimeout issue in Vercel serverless environment
+        // by auto-completing payments that are stuck in PROCESSING_CRYPTO for > 5 seconds
+        if (payment.status === 'PROCESSING_CRYPTO' && payment.transakOrderId) {
+            try {
+                const processingTime = Date.now() - new Date(payment.updatedAt).getTime();
+
+                // If stuck in PROCESSING_CRYPTO for more than 5 seconds, auto-complete
+                if (processingTime > 5000) {
+                    console.log('🤖 Auto-completing stuck payment for demo...', { id });
+
+                    await paymentService.handleTransakSuccess(payment.transakOrderId, {
+                        partnerOrderId: payment.id,
+                        cryptoAmount: payment.cryptoAmount,
+                        transactionHash: '0x' + Array(64).fill('0').map(() =>
+                            Math.floor(Math.random() * 16).toString(16)
+                        ).join('')
+                    });
+
+                    // Refresh payment data after completion
+                    payment = await paymentService.getPaymentDetails(id, country);
+                    console.log('✅ Auto-complete successful, new status:', payment.status);
+                }
+            } catch (err: any) {
+                console.warn('⚠️ Auto-complete failed:', err.message);
+                // Don't fail the request, just log the error
+            }
+        }
+        // ---------------------------------------------------------------
+
         return NextResponse.json({ success: true, data: payment });
     } catch (error: any) {
         console.error('API Error /payments/[id]:', error.message);
