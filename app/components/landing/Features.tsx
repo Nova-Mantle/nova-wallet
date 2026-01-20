@@ -77,7 +77,7 @@ export const Features = () => {
           <div className="absolute right-8 top-1/2 -translate-y-1/2 hidden lg:block">
             <div className="relative w-[280px] h-[200px]">
               <Image
-                src="/get-to-know-nova-wallet-more.png"
+                src="/landing-page/get-to-know-nova-wallet-more.png"
                 alt="Nova Wallet Features"
                 fill
                 className="object-contain"

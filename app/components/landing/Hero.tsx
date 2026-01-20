@@ -34,7 +34,7 @@ export const Hero = () => {
           className="relative w-[700px] h-[550px]"
         >
           <Image
-            src="/hero-decoration.png"
+            src="/landing-page/hero-decoration.png"
             alt="Hero Decoration"
             fill
             className="object-contain object-top-right"
