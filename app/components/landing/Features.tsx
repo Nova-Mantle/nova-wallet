@@ -41,7 +41,12 @@ const featureCards = [
 
 export const Features = () => {
   return (
-    <section id="features" className="py-24 relative">
+    <section id="features" className="py-24 relative bg-white" style={{
+      backgroundImage: 'url("/landing-page/Group 2085664905.svg")',
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat'
+    }}>
       {/* Info Card */}
       <div className="container mx-auto px-6 mb-16">
         <motion.div
@@ -113,51 +118,6 @@ export const Features = () => {
               </div>
             </motion.div>
           ))}
-        </div>
-      </div>
-
-      {/* CTA Section */}
-      <div className="container mx-auto px-6 mt-24">
-        <div className="flex flex-col lg:flex-row items-center gap-12">
-          {/* Let Nova Handle Complexity Image */}
-          <motion.div
-            initial={{ opacity: 0, x: -30 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="flex-1 max-w-md"
-          >
-            <div className="relative w-full h-[400px]">
-              <Image
-                src="/let-nova-handle-the-complexity.png"
-                alt="Let Nova Handle the Complexity"
-                fill
-                className="object-contain"
-              />
-            </div>
-          </motion.div>
-
-          {/* CTA Content */}
-          <motion.div
-            initial={{ opacity: 0, x: 30 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="flex-1"
-          >
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-              Let Nova Handle the Complexity
-            </h2>
-            <p className="text-white/60 text-lg mb-8">
-              Your wallet. Your intent. One conversation
-            </p>
-            <Link href="/chat">
-              <Button size="lg" className="nova-gradient rounded-full text-white gap-2 px-8 cursor-pointer navbar">
-                <Zap className="w-5 h-5" />
-                Get Started
-              </Button>
-            </Link>
-          </motion.div>
         </div>
       </div>
     </section>

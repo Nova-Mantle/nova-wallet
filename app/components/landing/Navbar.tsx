@@ -9,27 +9,27 @@ export const Navbar = () => {
   const { openConnectModal } = useConnectModal();
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-transparent">
+    <nav className="sticky top-0 left-0 right-0 z-50 bg-[#131313]">
       <div className="container mx-auto px-6 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
-          <div className="relative w-10 h-10">
+          <div className="relative w-12 h-12">
             <Image
               src="/navbar-icon.png"
               alt="Nova AI"
-              width={40}
-              height={40}
+              width={60}
+              height={60}
               className="object-contain"
             />
           </div>
-          <span className="text-lg font-semibold text-white/90">Nova AI</span>
+          <span className="text-lg font-semibold navbar-logo-typography">Nova AI</span>
         </Link>
 
         <div className="hidden md:flex items-center gap-8">
           <Link href="/" className="text-white/90 hover:text-white transition-colors">
             Home
           </Link>
-          <a href="#about" className="text-white/90 hover:text-white transition-colors">
-            About
+          <a href="#features" className="text-white/90 hover:text-white transition-colors">
+            Features
           </a>
         </div>
 
