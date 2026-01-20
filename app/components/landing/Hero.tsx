@@ -7,12 +7,13 @@ export const Hero = () => {
   return (
     <section className="relative min-h-screen flex items-center pt-20 overflow-hidden bg-white">
       {/* Background Effects */}
-      {/* Solid top layer to match navbar */}
-      <div className="absolute top-0 left-0 right-0 h-[100px] bg-[#131313]" style={{
+      {/* Gradient top layer to match navbar - fades smoothly */}
+      <div className="absolute top-0 left-0 right-0 h-[200px]" style={{
+        background: 'linear-gradient(180deg, #131313 0%, #131313 70%, rgba(19,19,19,0.8) 85%, rgba(19,19,19,0) 100%)',
         filter: 'blur(0px)'
       }} />
 
-      {/* Base gradient layer - with slight blur for smooth edges */}
+      {/* Base gradient layer */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[140%] h-[850px] rounded-b-[100%]" style={{
         background: 'linear-gradient(180deg, #131313 0%, #131313 75%, #1a0a4d 82%, #3904C8 90%, #6b3dd9 95%, #b8a3f0 98%, #D6C4FF 100%)',
         filter: 'blur(40px)'
