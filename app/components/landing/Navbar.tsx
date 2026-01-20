@@ -14,7 +14,7 @@ export const Navbar = () => {
         <Link href="/" className="flex items-center gap-2">
           <div className="relative w-12 h-12">
             <Image
-              src="/navbar-icon.png"
+              src="/navbar/navbar-icon.png"
               alt="Nova AI"
               width={60}
               height={60}
