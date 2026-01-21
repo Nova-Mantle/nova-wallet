@@ -254,16 +254,17 @@ function ChatPageContent() {
     // ============================================
     useCopilotAction({
         name: "prepareTransaction",
-        description: "Prepare a cryptocurrency transaction. IMPORTANT: If recipient or amount is missing, DO NOT ASK in chat. Call this tool immediately with empty arguments so the interactive form appears.",
+        description: "Prepare a cryptocurrency transaction. Shows an interactive form for user to input transaction details. Always call this when user wants to send crypto, even without parameters.",
         parameters: [
-            { name: "recipient", type: "string", description: "The recipient wallet address (0x...)" },
-            { name: "amount", type: "string", description: "The amount of native tokens to send (e.g., 0.1)" },
-            { name: "chainId", type: "number", description: "The chain ID for the transaction. MUST be one of: 1 (Mainnet), 5000 (Mantle), 11155111 (Sepolia), 5003 (Mantle Sepolia), 4202 (Lisk Sepolia), 84532 (Base Sepolia), 11155420 (Op Sepolia).", required: true },
+            { name: "recipient", type: "string", description: "The recipient wallet address (0x...)", required: false },
+            { name: "amount", type: "string", description: "The amount of native tokens to send (e.g., 0.1)", required: false },
+            { name: "chainId", type: "number", description: "The chain ID for the transaction. MUST be one of: 1 (Mainnet), 5000 (Mantle), 11155111 (Sepolia), 5003 (Mantle Sepolia), 4202 (Lisk Sepolia), 84532 (Base Sepolia), 11155420 (Op Sepolia).", required: false },
         ],
         render: ({ status, args }) => {
-            // Case 1: Execution started but arguments missing (triggered by button click)
-            // Or explicitly executing but waiting for args
-            if (status === "executing" && (!args.recipient || !args.amount)) {
+            // CRITICAL: Show form if args missing, REGARDLESS of status
+            // This prevents form from disappearing when handler returns empty string
+            // (which triggers followUp AI response by default)
+            if (!args.recipient || !args.amount) {
                 return (
                     <div className="mt-2">
                         <SendTransactionForm
@@ -271,9 +272,10 @@ function ChatPageContent() {
                                 recipient: args.recipient,
                                 amount: args.amount,
                             }}
-                            onSubmit={async (data) => {
+                            onSubmit={(data) => {
                                 const msg = `Send ${data.amount} ${data.token} to ${data.recipient}`;
-                                await appendMessage(
+                                // Don't await - let it send in background
+                                appendMessage(
                                     new TextMessage({
                                         role: MessageRole.User,
                                         content: msg,
@@ -314,7 +316,7 @@ function ChatPageContent() {
                                 // Send Transaction directly
                                 sendTransaction({
                                     to: args.recipient as `0x${string}`,
-                                    value: parseEther(args.amount),
+                                    value: parseEther(args.amount!),
                                 }, {
                                     onSuccess: (hash) => {
                                         toast.success("Transaction submitted!", {
@@ -339,16 +341,21 @@ function ChatPageContent() {
             return <></>;
         },
         handler: async ({ recipient, amount, chainId: targetChainId }) => {
+            // CRITICAL: Early return if args missing - let form handle it!
+            if (!recipient || !amount) {
+                return ""; // Empty string = form will be shown via render function
+            }
+
             if (!isConnected || !address) {
                 return "User wallet is not connected. Please ask the user to connect their wallet first.";
             }
 
-            // Validate address
-            if (!recipient || !recipient.startsWith("0x") || recipient.length !== 42) {
+            // Validate address (only if provided)
+            if (!recipient.startsWith("0x") || recipient.length !== 42) {
                 return "Invalid recipient address. Please provide a valid Ethereum address (0x...).";
             }
 
-            // Validate amount
+            // Validate amount (only if provided)
             const amountNum = parseFloat(amount);
             if (isNaN(amountNum) || amountNum <= 0) {
                 return "Invalid amount. Please provide a valid positive number.";
@@ -381,14 +388,15 @@ function ChatPageContent() {
     // ============================================
     useCopilotAction({
         name: "predictTradeCost",
-        description: "Predicts execution cost and slippage for a trade. Use this when user wants to analyze trade cost, check slippage, or compare exchanges for CEX (Binance, Kraken, etc).",
+        description: "Predicts execution cost and slippage for a trade. Shows an interactive form for user input. Always call this when user wants to analyze trade cost or check slippage, even without parameters.",
         parameters: [
-            { name: "symbol", type: "string", description: "Trading pair symbol (e.g., BTC/USDT, ETH/USDT)" },
-            { name: "amount", type: "number", description: "Amount of crypto to trade" },
-            { name: "side", type: "string", description: "Trade side: 'buy' or 'sell'" },
+            { name: "symbol", type: "string", description: "Trading pair symbol (e.g., BTC/USDT, ETH/USDT)", required: false },
+            { name: "amount", type: "number", description: "Amount of crypto to trade", required: false },
+            { name: "side", type: "string", description: "Trade side: 'buy' or 'sell'", required: false },
         ],
         render: ({ status, args }) => {
-            if (status === "complete" && slippageDataRef.current) {
+            // PRIORITY 1: If data exists, show result card
+            if (slippageDataRef.current) {
                 return (
                     <SlippageCard
                         symbol={slippageDataRef.current.symbol}
@@ -398,36 +406,43 @@ function ChatPageContent() {
                     />
                 );
             }
-            if (status === "executing" && (!args.symbol || !args.amount)) {
-                return (
-                    <div className="mt-2">
-                        <SlippageForm
-                            defaultValues={{
-                                symbol: args.symbol,
-                                amount: args.amount ? String(args.amount) : undefined,
-                                side: args.side as "buy" | "sell"
-                            }}
-                            onSubmit={async (data) => {
-                                const msg = `Analyze slippage for ${data.side} ${data.amount} ${data.symbol}`;
-                                await appendMessage(
-                                    new TextMessage({
-                                        role: MessageRole.User,
-                                        content: msg,
-                                    })
-                                );
-                            }}
-                        />
-                    </div>
-                );
-            }
 
+            // PRIORITY 2: If executing, show loading
             if (status === "executing") {
                 return <div className="text-sm text-gray-500 italic animate-pulse">🤖 Analyzing market depth & predicted slippage...</div>;
             }
-            return <></>;
+
+            // PRIORITY 3: Default to form
+            return (
+                <div className="mt-2">
+                    <SlippageForm
+                        defaultValues={{
+                            symbol: args.symbol,
+                            amount: args.amount ? String(args.amount) : undefined,
+                            side: args.side as "buy" | "sell"
+                        }}
+                        onSubmit={(data) => {
+                            const msg = `Analyze slippage for ${data.side} ${data.amount} ${data.symbol}`;
+                            // Don't await - let it send in background
+                            appendMessage(
+                                new TextMessage({
+                                    role: MessageRole.User,
+                                    content: msg,
+                                })
+                            );
+                        }}
+                    />
+                </div>
+            );
         },
         handler: async ({ symbol, amount, side }) => {
             console.log("🔥 predictTradeCost action called!", { symbol, amount, side }); // DEBUG
+
+            // CRITICAL: Early return if args missing - let form handle it!
+            if (!symbol || !amount) {
+                return ""; // Empty string = form will be shown via render function
+            }
+
             try {
                 // Determine side if not provided or valid
                 const tradeSide = (side && ['buy', 'sell'].includes(side.toLowerCase())) ? side.toLowerCase() : 'sell';
@@ -808,7 +823,7 @@ function ChatPageContent() {
     // ============================================
     useCopilotAction({
         name: "createPaymentLink",
-        description: "Buat payment link. PENTING: Jika parameter amount/token belum ada, JANGAN TANYA di chat. Langsung panggil tool ini agar form input muncul.",
+        description: "Create a payment link. Shows an interactive form for user to input payment details. Always call this when user wants to create a payment link, even without parameters.",
         parameters: [
             { name: "amount", type: "number", description: "Jumlah crypto (e.g. 0.1)", required: false },
             { name: "token", type: "string", description: "Symbol token (ETH, USDC, MNT, dll)", required: false },
@@ -818,8 +833,9 @@ function ChatPageContent() {
         handler: async ({ amount, token, network, receiverWallet }) => {
             console.log("🔥 createPaymentLink action called!", { amount, token });
 
+            // CRITICAL: Early return if args missing - let form handle it!
             if (!amount || !token) {
-                return "Mohon lengkapi data pembayaran di form berikut.";
+                return ""; // Empty string = form will be shown via render function
             }
 
             try {
@@ -845,31 +861,19 @@ function ChatPageContent() {
             }
         },
         render: ({ status, args }) => {
-            // Case 1: Show Form (If incomplete args/starting)
-            if (status === "executing" && (!args.amount || !args.token)) {
+            // PRIORITY 1: If data exists, show result card immediately
+            if (paymentLinkDataRef.current) {
                 return (
                     <div className="mt-2">
-                        <CreatePaymentForm
-                            defaultValues={{
-                                amount: args.amount,
-                                symbol: args.token,
-                                network: args.network
-                            }}
-                            onSubmit={async (formData: any) => {
-                                const msg = `Buatkan payment link: ${formData.amount} ${formData.token} di network ${formData.network} untuk wallet ${formData.receiverWallet}`;
-                                await appendMessage(
-                                    new TextMessage({
-                                        role: MessageRole.User,
-                                        content: msg,
-                                    })
-                                );
-                            }}
+                        <PaymentStatusCard
+                            paymentId={paymentLinkDataRef.current.id}
+                            initialData={paymentLinkDataRef.current}
                         />
                     </div>
                 );
             }
 
-            // Case 2: Executing with data
+            // PRIORITY 2: If executing, show loading
             if (status === "executing") {
                 return (
                     <div className="flex items-center gap-2 p-4 bg-gray-900 rounded-xl border border-gray-800 max-w-sm mt-3 animate-pulse">
@@ -881,19 +885,47 @@ function ChatPageContent() {
                 );
             }
 
-            // Case 3: Complete -> Show Result Card
-            if (status === "complete" && paymentLinkDataRef.current) {
-                return (
-                    <div className="mt-2">
-                        <PaymentStatusCard
-                            paymentId={paymentLinkDataRef.current.id}
-                            initialData={paymentLinkDataRef.current}
-                        />
-                    </div>
-                );
-            }
+            // PRIORITY 3: Default to form (when no data and not executing)
+            return (
+                <div className="mt-2">
+                    <CreatePaymentForm
+                        defaultValues={{
+                            amount: args.amount,
+                            symbol: args.token,
+                            network: args.network
+                        }}
+                        onSubmit={async (formData: any) => {
+                            try {
+                                const finalReceiver = formData.receiverWallet || address;
+                                if (!finalReceiver) {
+                                    toast.error("Wallet not connected");
+                                    return;
+                                }
 
-            return <></>;
+                                // Directly create payment link via API
+                                const response = await axios.post('/api/payments/create', {
+                                    cryptoAmount: formData.amount,
+                                    cryptoCurrency: formData.token || 'ETH',
+                                    network: formData.network || 'ethereum',
+                                    receiverWallet: finalReceiver
+                                });
+
+                                if (response.data.success) {
+                                    paymentLinkDataRef.current = response.data.data;
+                                    forceUpdate(n => n + 1);
+                                    toast.success("Payment link created!");
+                                    // Don't send message to AI - results will show via data check above
+                                } else {
+                                    toast.error("Failed to create payment link");
+                                }
+                            } catch (error: any) {
+                                console.error("Create payment error:", error);
+                                toast.error(`Error: ${error.message}`);
+                            }
+                        }}
+                    />
+                </div>
+            );
         },
     });
 
@@ -1071,6 +1103,51 @@ Wallet user: ${address} | Chain ID: ${chainId}`}
                                 )}
                             </div>
                         </>
+                    )}
+
+                    {/* Floating Cards - Rendered outside action cycle */}
+                    {paymentLinkDataRef.current && (
+                        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 max-w-md w-full px-4">
+                            <div className="relative">
+                                <button
+                                    onClick={() => {
+                                        paymentLinkDataRef.current = null;
+                                        forceUpdate(n => n + 1);
+                                    }}
+                                    className="absolute -top-2 -right-2 z-10 w-8 h-8 bg-gray-900 hover:bg-gray-800 text-white rounded-full flex items-center justify-center shadow-lg transition-colors"
+                                    aria-label="Close"
+                                >
+                                    ✕
+                                </button>
+                                <PaymentStatusCard
+                                    paymentId={paymentLinkDataRef.current.id}
+                                    initialData={paymentLinkDataRef.current}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {slippageDataRef.current && (
+                        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 max-w-2xl w-full px-4">
+                            <div className="relative">
+                                <button
+                                    onClick={() => {
+                                        slippageDataRef.current = null;
+                                        forceUpdate(n => n + 1);
+                                    }}
+                                    className="absolute -top-2 -right-2 z-10 w-8 h-8 bg-gray-900 hover:bg-gray-800 text-white rounded-full flex items-center justify-center shadow-lg transition-colors"
+                                    aria-label="Close"
+                                >
+                                    ✕
+                                </button>
+                                <SlippageCard
+                                    symbol={slippageDataRef.current.symbol}
+                                    amount={slippageDataRef.current.amount}
+                                    side={slippageDataRef.current.side}
+                                    quotes={slippageDataRef.current.quotes}
+                                />
+                            </div>
+                        </div>
                     )}
                 </main>
             </div>
