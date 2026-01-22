@@ -13,14 +13,14 @@ export const Hero = () => {
         filter: 'blur(0px)'
       }} />
 
-      {/* Base gradient layer - shortened height */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[140%] h-[700px] rounded-b-[100%]" style={{
+      {/* Base gradient layer - dynamic height */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[140%] h-[85vh] rounded-b-[100%]" style={{
         background: 'linear-gradient(180deg, #131313 0%, #131313 70%, #1a0a4d 80%, #3904C8 88%, #6b3dd9 93%, rgba(214,196,255,0.6) 96%, rgba(255,255,255,0.3) 98%, rgba(255,255,255,0.1) 100%)',
         filter: 'blur(40px)'
       }} />
 
-      {/* Blur layer only at the edges/perimeter - shortened height */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[140%] h-[700px] rounded-b-[100%]" style={{
+      {/* Blur layer only at the edges/perimeter - dynamic height */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[140%] h-[85vh] rounded-b-[100%]" style={{
         background: 'radial-gradient(ellipse 60% 80% at 50% 20%, transparent 0%, transparent 60%, #3904C8 88%, #8b6dd9 93%, rgba(214,196,255,0.4) 96%, rgba(255,255,255,0.2) 100%)',
         filter: 'blur(60px)'
       }} />
@@ -31,7 +31,7 @@ export const Hero = () => {
           initial={{ opacity: 0, x: 100 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 1, ease: "easeOut" }}
-          className="relative w-[700px] h-[550px]"
+          className="relative w-[40vw] h-[30vw] max-w-[700px] max-h-[550px]"
         >
           <Image
             src="/landing-page/hero-decoration.png"
