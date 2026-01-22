@@ -24,7 +24,14 @@ function validateEthereumAddress(address: string | undefined): {
     error?: string;
 } {
     if (!address) {
-        return { isValid: true }; // Allow undefined (will use connected wallet)
+        return { isValid: true };
+    }
+
+    if (address.includes('.')) {
+        return {
+            isValid: false,
+            error: "❌ ENS names and domain names (like 'vitalik.eth') are not supported yet. Please use the raw Ethereum address format (0x... with 42 characters)."
+        };
     }
 
     // Add 0x prefix if missing
@@ -32,13 +39,6 @@ function validateEthereumAddress(address: string | undefined): {
 
     // Check format: 0x followed by 40 hex characters
     if (!/^0x[a-fA-F0-9]{40}$/.test(cleanAddress)) {
-        if (address.endsWith('.eth')) {
-            return {
-                isValid: false,
-                error: "❌ ENS names (like 'vitalik.eth') are not supported yet. Please use the raw Ethereum address format (0x... with 42 characters)."
-            };
-        }
-
         if (cleanAddress.length !== 42) {
             return {
                 isValid: false,
@@ -54,7 +54,7 @@ function validateEthereumAddress(address: string | undefined): {
 
     return {
         isValid: true,
-        normalizedAddress: cleanAddress
+        normalizedAddress: cleanAddress.toLowerCase()  // ✅ FIX: Convert to lowercase
     };
 }
 
@@ -503,18 +503,27 @@ For multi-chain portfolio analysis, use analyzePortfolioAllChains instead.`;
     // ============================================
     useCopilotAction({
         name: "analyzePortfolio",
-        description: FIXED_PORTFOLIO_DESCRIPTION,
+        description: `⚠️ SINGLE-CHAIN ONLY - DO NOT use for general "analyze" queries.
+
+Use analyzeWalletComprehensive instead for "analyze <address>".
+
+Use this ONLY when:
+- User explicitly says "portfolio on Ethereum"
+- User asks "holdings on Lisk Sepolia"
+- You need portfolio for ONE specific chain
+
+For multi-chain or comprehensive analysis, use analyzeWalletComprehensive.`,
         parameters: [
             {
                 name: "targetAddress",
                 type: "string",
-                description: "Wallet address to analyze (0x...). If not provided, uses connected wallet address.",
+                description: "Wallet address (0x...)",
                 required: false
             },
             {
                 name: "chainId",
                 type: "number",
-                description: "REQUIRED: Chain ID must be explicitly provided",
+                description: "REQUIRED: Must specify chain ID",
                 required: true
             },
         ],
@@ -614,9 +623,15 @@ For multi-chain portfolio analysis, use analyzePortfolioAllChains instead.`;
     // ============================================
     useCopilotAction({
         name: "analyzeTokenActivity",
-        description: `Analisis aktivitas trading wallet: P&L per token, performa trading.
+        description: `⚠️ SINGLE-CHAIN ONLY - DO NOT use for general "analyze" queries.
 
-⚠️ Single-chain only. For multi-chain analysis, call this multiple times or use checkAllBalances.`,
+Use analyzeWalletComprehensive instead.
+
+Use this ONLY when:
+- User explicitly asks "trading activity on Ethereum"
+- User says "P&L on Lisk Sepolia"
+
+For comprehensive analysis, use analyzeWalletComprehensive.`,
         parameters: [
             {
                 name: "targetAddress",
@@ -730,9 +745,15 @@ For multi-chain portfolio analysis, use analyzePortfolioAllChains instead.`;
     // ============================================
     useCopilotAction({
         name: "getTransactionStats",
-        description: `Statistik transaksi wallet: total transaksi, gas fees, aktivitas.
+        description: `⚠️ SINGLE-CHAIN ONLY - DO NOT use for general "analyze" queries.
 
-⚠️ Single-chain only. Best used when user asks about gas spending on a specific chain.`,
+Use analyzeWalletComprehensive instead.
+
+Use this ONLY when:
+- User explicitly asks "gas spending on Ethereum"
+- User says "transaction stats on Lisk"
+
+For comprehensive analysis, use analyzeWalletComprehensive.`,
         parameters: [
             {
                 name: "targetAddress",
@@ -976,23 +997,18 @@ For multi-chain portfolio analysis, use analyzePortfolioAllChains instead.`;
 
     useCopilotAction({
         name: "analyzeWhaleActivity",
-        description: `⚠️ SINGLE-CHAIN ONLY - Analisis whale transactions pada SATU chain spesifik.
+        description: `⚠️ SINGLE-CHAIN ONLY - DO NOT use for general "analyze" queries.
 
-✅ GUNAKAN INI HANYA JIKA user EXPLICITLY menyebut chain:
-- "whale activity ON ETHEREUM"
-- "largest transactions ON MANTLE"
-- "big transactions ON LISK SEPOLIA"
+Use analyzeWhaleActivityAllChains for multi-chain whale analysis.
 
-❌ JANGAN gunakan ini untuk:
-- "show me largest transactions" (pakai analyzeWhaleActivityAllChains)
-- "whale activity for 0x123..." (pakai analyzeWhaleActivityAllChains)
-- "my biggest transactions" (pakai analyzeWhaleActivityAllChains)
+Use this ONLY when:
+- User explicitly says "whale activity ON ETHEREUM"
+- User says "largest transactions ON MANTLE"
 
-Extract chainId dari chain name yang disebutkan user:
-- "on Ethereum" atau "on ETH" → chainId: 1
-- "on Ethereum Sepolia" → chainId: 11155111
-- "on Mantle Sepolia" → chainId: 5003
-- "on Lisk Sepolia" → chainId: 4202`,
+Extract chainId from chain name:
+- "on Ethereum" → chainId: 1
+- "on Lisk Sepolia" → chainId: 4202
+- "on Mantle Sepolia" → chainId: 5003`,
         parameters: [
             {
                 name: "targetAddress",
@@ -1061,7 +1077,7 @@ Extract chainId dari chain name yang disebutkan user:
                         action: 'whale',
                         address: walletAddress,
                         chainId: resolvedChainId,
-                        timeframeDays: timeframeDays || 180,
+                        timeframeDays: timeframeDays || (isExternalAddress ? 365 : 180),
                         whaleThresholdUSD: whaleThreshold
                     })
                 });
@@ -1140,7 +1156,14 @@ Extract chainId dari chain name yang disebutkan user:
     // ============================================
     useCopilotAction({
         name: "analyzeWhaleActivityAllChains",
-        description: `✅ DEFAULT ACTION - Analisis whale transactions di SEMUA chain sekaligus.`,
+        description: `✅ MULTI-CHAIN whale analysis - Use when user asks about large transactions WITHOUT specifying a chain.
+
+Examples:
+- "show me my largest transactions" → Use this
+- "whale activity for 0xd8dA..." → Use this
+- "biggest transactions" → Use this
+
+This checks ALL chains automatically.`,
         parameters: [
             {
                 name: "targetAddress",
@@ -1328,7 +1351,14 @@ Extract chainId dari chain name yang disebutkan user:
 
     useCopilotAction({
         name: "analyzeCounterpartyAllChains",
-        description: `✅ DEFAULT ACTION - Analisis counterparties di SEMUA chain sekaligus.`,
+        description: `✅ MULTI-CHAIN counterparty analysis - Use when user asks about interactions WITHOUT specifying a chain.
+
+Examples:
+- "who have I been interacting with?" → Use this
+- "my exchanges" → Use this
+- "show counterparties for 0xd8dA..." → Use this
+
+This checks ALL chains automatically.`,
         parameters: [
             {
                 name: "targetAddress",
@@ -1508,7 +1538,28 @@ Extract chainId dari chain name yang disebutkan user:
     // ============================================
     useCopilotAction({
         name: "analyzeWalletComprehensive",
-        description: "✅ ALAT ANALISIS LENGKAP...",
+        description: `🎯 PRIMARY ACTION - Use this when user says "analyze <address>"
+
+⚠️ CRITICAL: Do NOT resolve ENS names! Pass addresses exactly as user provides.
+If user provides "vitalik.eth", pass "vitalik.eth" (validation will reject it).
+
+This is a COMPLETE wallet analysis that runs ALL checks in ONE call:
+✅ Portfolio holdings
+✅ Whale transactions (>$50k)
+✅ Counterparty analysis
+✅ Transaction statistics
+✅ Trading P&L
+
+When to use:
+- "analyze 0xd8dA..." → Use this
+- "analyze that address" → Use this
+- "comprehensive analysis" → Use this
+
+When NOT to use:
+- "check my balance" → Use checkBalance
+- "whale activity on Ethereum" → Use analyzeWhaleActivity
+
+This action is OPTIMIZED and calls the backend only ONCE.`,
         parameters: [
             {
                 name: "targetAddress",
@@ -1526,7 +1577,14 @@ Extract chainId dari chain name yang disebutkan user:
         handler: async ({ targetAddress, chainId: targetChainId }) => {
             console.log("🚀 analyzeWalletComprehensive called!", { targetAddress });
 
+            if (targetAddress && targetAddress.includes('.')) {
+                return "❌ CANNOT PROCEED: ENS names (like 'vitalik.eth') are not supported.\n\n" +
+                    "I cannot resolve this to an address. Please ask the user to provide the raw Ethereum address (0x... format).\n\n" +
+                    "DO NOT attempt to resolve this ENS name yourself. Wait for the user to provide a valid address.";
+            }
+
             const validation = validateEthereumAddress(targetAddress);
+
             if (!validation.isValid) {
                 return validation.error!;
             }
@@ -1534,12 +1592,17 @@ Extract chainId dari chain name yang disebutkan user:
             const addressToUse = validation.normalizedAddress || targetAddress;
             const resolvedChainId = targetChainId || 1;
 
-            // ✅ FIX: Use same logic as whale action
+            // ✅ Use 365 days for external addresses (Vitalik's wallet is old)
             const isExternalAddress = addressToUse && address &&
                 addressToUse.toLowerCase() !== address.toLowerCase();
-            const timeframe = isExternalAddress ? 90 : 180;
+            const timeframe = isExternalAddress ? 365 : 180;
 
             try {
+                console.log(`📊 Starting comprehensive analysis...`);
+                console.log(`   Address: ${addressToUse.substring(0, 10)}...`);
+                console.log(`   Chain: ${resolvedChainId}`);
+                console.log(`   Timeframe: ${timeframe} days`);
+
                 const response = await fetch('/api/blockchain', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1547,47 +1610,103 @@ Extract chainId dari chain name yang disebutkan user:
                         action: 'comprehensive',
                         address: addressToUse,
                         chainId: resolvedChainId,
-                        timeframeDays: timeframe,  // ✅ NOW CONSISTENT!
+                        timeframeDays: timeframe,
                         whaleThresholdUSD: 50000
                     })
                 });
 
-                if (!response.ok) throw new Error("API call failed");
-                const { data: result } = await response.json();
-
-                if (result.data.type === 'comprehensive') {
-                    const { portfolio, whale, counterparty, stats, tokenActivity } = result.data;
-
-                    let msg = `✅ **Laporan Analisis Lengkap** untuk ${addressToUse?.substring(0, 6)}...\n`;
-                    msg += `Chain: ${result.chain}\n\n`;
-
-                    // 1. Portfolio
-                    msg += `💰 **Portfolio:** $${portfolio.analysis.totalPortfolioValueUSD.toLocaleString()} (${portfolio.analysis.numTokens} tokens)\n`;
-
-                    // 2. Whale Status
-                    if (whale.analysis.numWhaleTransactions > 0) {
-                        msg += `🐋 **Whale Activity:** TERDETEKSI. ${whale.analysis.numWhaleTransactions} transaksi besar (Total: $${whale.analysis.totalWhaleValueUSD.toLocaleString()}).\n`;
-                    } else {
-                        msg += `🐋 **Whale Activity:** Tidak ada transaksi >$50k dalam periode ini.\n`;
-                    }
-
-                    // 3. Counterparties
-                    msg += `🤝 **Interaksi:** Berinteraksi dengan ${counterparty.analysis.totalUniqueCounterparties} alamat unik.\n`;
-
-                    // 4. Stats
-                    msg += `⛽ **Gas & Activity:** Gas spent $${stats.stats.totalGasSpentUSD.toFixed(2)} (based on latest ${stats.stats.totalTransactions} transactions).\n`;
-
-                    // 5. P&L
-                    const pnl = tokenActivity.analysis.summary.totalPnLPercentage;
-                    msg += `📈 **Trading P&L:** ${pnl > 0 ? '+' : ''}${pnl.toFixed(2)}% (snapshot)\n\n`;
-
-                    // Footer Note with timeframe info
-                    msg += `ℹ️ *Note: Analysis based on last ${timeframe} days (latest 500 transactions).*`;
-                    return msg;
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}`);
                 }
-                return "Gagal mendapatkan data komprehensif.";
-            } catch (e: any) {
-                return `Error: ${e.message}`;
+
+                const json = await response.json();
+
+                // ✅ DEBUG: Log full response
+                console.log('📦 Full API Response:', JSON.stringify(json, null, 2));
+
+                // ✅ Handle two possible structures:
+                // Structure 1: { data: { data: { type: 'comprehensive', ... } } }
+                // Structure 2: { data: { type: 'comprehensive', ... } }
+
+                let comprehensiveData;
+
+                if (json.data?.data?.type === 'comprehensive') {
+                    // Structure 1 (nested)
+                    comprehensiveData = json.data.data;
+                    console.log('✅ Using Structure 1 (nested data.data)');
+                } else if (json.data?.type === 'comprehensive') {
+                    // Structure 2 (flat)
+                    comprehensiveData = json.data;
+                    console.log('✅ Using Structure 2 (flat data)');
+                } else {
+                    console.error('❌ Unexpected structure:', json);
+                    throw new Error('Invalid response structure from API');
+                }
+
+                // ✅ Extract data safely
+                const portfolio = comprehensiveData.portfolio;
+                const whale = comprehensiveData.whale;
+                const counterparty = comprehensiveData.counterparty;
+                const stats = comprehensiveData.stats;
+                const tokenActivity = comprehensiveData.tokenActivity;
+
+                console.log('📊 Data fields:', {
+                    portfolio: !!portfolio,
+                    whale: !!whale,
+                    counterparty: !!counterparty,
+                    stats: !!stats,
+                    tokenActivity: !!tokenActivity
+                });
+
+                // ✅ Validate all required fields exist
+                if (!portfolio || !whale || !counterparty || !stats || !tokenActivity) {
+                    throw new Error('Missing required analysis data');
+                }
+
+                // ✅ Extract values with safe defaults
+                const portfolioValue = portfolio.totalPortfolioValueUSD || 0;
+                const numTokens = portfolio.numTokens || 0;
+                const numWhaleTxs = whale.numWhaleTransactions || 0;
+                const whaleValue = whale.totalWhaleValueUSD || 0;
+                const numCounterparties = counterparty.totalUniqueCounterparties || 0;
+                const gasSpent = stats.totalGasSpentUSD || 0;
+                const totalTxs = stats.totalTransactions || 0;
+                const pnl = tokenActivity.summary?.totalPnLPercentage || 0;
+
+                console.log('✅ Extracted values:', {
+                    portfolioValue,
+                    numTokens,
+                    numWhaleTxs,
+                    numCounterparties,
+                    totalTxs
+                });
+
+                // Build response
+                const chain = json.chain || json.data?.chain || 'Unknown Chain';
+
+                let msg = `✅ **Laporan Analisis Lengkap** untuk ${addressToUse.substring(0, 6)}...\n`;
+                msg += `Chain: ${chain}\n\n`;
+
+                msg += `💰 **Portfolio:** $${portfolioValue.toLocaleString()} (${numTokens} tokens)\n`;
+
+                if (numWhaleTxs > 0) {
+                    msg += `🐋 **Whale Activity:** TERDETEKSI. ${numWhaleTxs} transaksi besar (Total: $${whaleValue.toLocaleString()}).\n`;
+                } else {
+                    msg += `🐋 **Whale Activity:** Tidak ada transaksi >$50k dalam ${timeframe} hari terakhir.\n`;
+                }
+
+                msg += `🤝 **Interaksi:** ${numCounterparties} alamat unik.\n`;
+                msg += `⛽ **Gas:** $${gasSpent.toFixed(2)} (${totalTxs} transaksi).\n`;
+                msg += `📈 **Trading P&L:** ${pnl > 0 ? '+' : ''}${pnl.toFixed(2)}%\n\n`;
+                msg += `ℹ️ *Analisis berdasarkan ${timeframe} hari terakhir.*`;
+
+                return msg;
+
+            } catch (error: any) {
+                console.error('❌ Comprehensive analysis failed:', error);
+                console.error('Stack:', error.stack);
+
+                return `❌ Maaf, terjadi kesalahan:\n\n${error.message}\n\nSilakan coba lagi.`;
             }
         },
         render: ({ status }) => {

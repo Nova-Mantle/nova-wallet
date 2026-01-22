@@ -79,24 +79,25 @@ export class WhaleAggregator {
   ): Promise<Map<string, number>> {
     const priceCache = new Map<string, number>();
 
-    // Count token occurrences
-    const tokenCounts = new Map<string, number>();
+    // ✅ FIX: Track token amounts (not just counts) to find largest transfers
+    const tokenAmounts = new Map<string, number>();
 
     for (const tx of transactions) {
       const timestamp = parseInt(tx.timeStamp);
       if (timestamp < timeframeStart || timestamp > timeframeEnd) continue;
 
       if (tx.txType === 'ERC20' && tx.contractAddress) {
-        tokenCounts.set(
+        const amount = parseFloat(tx.value || '0');
+        tokenAmounts.set(
           tx.contractAddress,
-          (tokenCounts.get(tx.contractAddress) || 0) + 1
+          (tokenAmounts.get(tx.contractAddress) || 0) + amount
         );
       }
     }
 
-    // Get top N tokens by transaction count
-    const topTokens = Array.from(tokenCounts.entries())
-      .sort((a, b) => b[1] - a[1])
+    // ✅ FIX: Get top N tokens by TOTAL AMOUNT transferred (not transaction count)
+    const topTokens = Array.from(tokenAmounts.entries())
+      .sort((a, b) => b[1] - a[1])  // Sort by amount DESC
       .slice(0, limit)
       .map(([addr]) => addr);
 
@@ -178,6 +179,13 @@ export class WhaleAggregator {
             const tokenInfo = await this.client.getTokenMetadata(tx.contractAddress);
             const tokenAmount = parseFloat(tx.value || '0') / Math.pow(10, tokenInfo.decimals);
             valueUSD = tokenAmount * cachedPrice;
+            // ✅ SANITY CHECK: Reject absurdly high values (likely fake tokens)
+            const MAX_REASONABLE_VALUE = 100_000_000_000; // $100 billion max
+            if (valueUSD > MAX_REASONABLE_VALUE) {
+              console.log(`   ⚠️ Rejecting suspicious whale tx: $${valueUSD.toLocaleString()} (${tokenInfo.symbol})`);
+              continue; // Skip this transaction
+            }
+
             valueNative = tokenAmount;
             tokenSymbol = tokenInfo.symbol;
             tokenAddress = tx.contractAddress;
