@@ -436,11 +436,11 @@ function ChatPageContent() {
             );
         },
         handler: async ({ symbol, amount, side }) => {
-            console.log("🔥 predictTradeCost action called!", { symbol, amount, side }); // DEBUG
+            console.log("🔥 predictTradeCost action called!", { symbol, amount, side });
 
-            // CRITICAL: Early return if args missing - let form handle it!
+            // Validate required params
             if (!symbol || !amount) {
-                return ""; // Empty string = form will be shown via render function
+                return ""; // Show form if params missing
             }
 
             try {
@@ -463,9 +463,8 @@ function ChatPageContent() {
                     amount,
                     side: tradeSide as "buy" | "sell"
                 };
-                forceUpdate(n => n + 1); // Trigger render
 
-                return `Prediction complete. View the card above.`;
+                return `✅ Analisis slippage selesai! ${data.best_venue} memberikan harga terbaik dengan slippage ${(data.quotes[0].predicted_slippage_pct * 100).toFixed(3)}%.`;
             } catch (error: any) {
                 console.error("🔥 predictTradeCost error:", error);
 
@@ -483,9 +482,8 @@ function ChatPageContent() {
                     amount,
                     side: (side && ['buy', 'sell'].includes(side.toLowerCase())) ? (side.toLowerCase() as "buy" | "sell") : 'sell'
                 };
-                forceUpdate(n => n + 1);
 
-                return `API Error (${error.message}). Showing simulated data for demonstration.`;
+                return `⚠️ API Error (${error.message}). Menampilkan data simulasi untuk demo.`;
             }
         },
     });
@@ -831,17 +829,20 @@ function ChatPageContent() {
             { name: "receiverWallet", type: "string", description: "Wallet penerima (default: wallet user yg connect)", required: false },
         ],
         handler: async ({ amount, token, network, receiverWallet }) => {
-            console.log("🔥 createPaymentLink action called!", { amount, token });
+            console.log("🔥 createPaymentLink action called!", { amount, token, network, receiverWallet });
 
-            // CRITICAL: Early return if args missing - let form handle it!
+            // Validate required params
             if (!amount || !token) {
-                return ""; // Empty string = form will be shown via render function
+                return ""; // Show form if params missing
             }
 
             try {
                 const finalReceiver = receiverWallet || address;
-                if (!finalReceiver) return "Wallet not connected";
+                if (!finalReceiver) {
+                    return "❌ Wallet belum terkoneksi. Silakan hubungkan wallet terlebih dahulu.";
+                }
 
+                // Call API to create payment link
                 const response = await axios.post('/api/payments/create', {
                     cryptoAmount: amount,
                     cryptoCurrency: token || 'ETH',
@@ -850,18 +851,20 @@ function ChatPageContent() {
                 });
 
                 if (response.data.success) {
+                    // Store data for render
                     paymentLinkDataRef.current = response.data.data;
-                    forceUpdate(n => n + 1);
-                    return `Payment link berhasil dibuat! ID: ${response.data.data.id}`;
+                    return `✅ Payment link berhasil dibuat! Scan QR code di atas atau copy link-nya untuk menerima pembayaran.`;
                 }
-                return "Gagal membuat payment link.";
+
+                return "❌ Gagal membuat payment link. Silakan coba lagi.";
             } catch (error: any) {
                 console.error("Create payment error:", error);
-                return `Error: ${error.message}`;
+                paymentLinkDataRef.current = null; // Clear any partial data
+                return `❌ Error: ${error.message}. Silakan coba lagi atau hubungi support.`;
             }
         },
         render: ({ status, args }) => {
-            // PRIORITY 1: If data exists, show result card immediately
+            // PRIORITY 1: If data exists, show card inline
             if (paymentLinkDataRef.current) {
                 return (
                     <div className="mt-2">
@@ -880,12 +883,12 @@ function ChatPageContent() {
                         <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
                             <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
                         </div>
-                        <span className="text-sm text-gray-300">Generating Payment Link...</span>
+                        <span className="text-sm text-gray-300">Membuat payment link...</span>
                     </div>
                 );
             }
 
-            // PRIORITY 3: Default to form (when no data and not executing)
+            // PRIORITY 3: Show form
             return (
                 <div className="mt-2">
                     <CreatePaymentForm
@@ -894,34 +897,18 @@ function ChatPageContent() {
                             symbol: args.token,
                             network: args.network
                         }}
-                        onSubmit={async (formData: any) => {
-                            try {
-                                const finalReceiver = formData.receiverWallet || address;
-                                if (!finalReceiver) {
-                                    toast.error("Wallet not connected");
-                                    return;
-                                }
+                        onSubmit={(formData) => {
+                            // Build natural language message
+                            const walletText = formData.receiverWallet || 'wallet saya';
+                            const message = `Buatkan payment link ${formData.amount} ${formData.token} di network ${formData.network} untuk ${walletText}`;
 
-                                // Directly create payment link via API
-                                const response = await axios.post('/api/payments/create', {
-                                    cryptoAmount: formData.amount,
-                                    cryptoCurrency: formData.token || 'ETH',
-                                    network: formData.network || 'ethereum',
-                                    receiverWallet: finalReceiver
-                                });
-
-                                if (response.data.success) {
-                                    paymentLinkDataRef.current = response.data.data;
-                                    forceUpdate(n => n + 1);
-                                    toast.success("Payment link created!");
-                                    // Don't send message to AI - results will show via data check above
-                                } else {
-                                    toast.error("Failed to create payment link");
-                                }
-                            } catch (error: any) {
-                                console.error("Create payment error:", error);
-                                toast.error(`Error: ${error.message}`);
-                            }
+                            // Send message to AI
+                            appendMessage(
+                                new TextMessage({
+                                    role: MessageRole.User,
+                                    content: message
+                                })
+                            );
                         }}
                     />
                 </div>
@@ -1103,51 +1090,6 @@ Wallet user: ${address} | Chain ID: ${chainId}`}
                                 )}
                             </div>
                         </>
-                    )}
-
-                    {/* Floating Cards - Rendered outside action cycle */}
-                    {paymentLinkDataRef.current && (
-                        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 max-w-md w-full px-4">
-                            <div className="relative">
-                                <button
-                                    onClick={() => {
-                                        paymentLinkDataRef.current = null;
-                                        forceUpdate(n => n + 1);
-                                    }}
-                                    className="absolute -top-2 -right-2 z-10 w-8 h-8 bg-gray-900 hover:bg-gray-800 text-white rounded-full flex items-center justify-center shadow-lg transition-colors"
-                                    aria-label="Close"
-                                >
-                                    ✕
-                                </button>
-                                <PaymentStatusCard
-                                    paymentId={paymentLinkDataRef.current.id}
-                                    initialData={paymentLinkDataRef.current}
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    {slippageDataRef.current && (
-                        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 max-w-2xl w-full px-4">
-                            <div className="relative">
-                                <button
-                                    onClick={() => {
-                                        slippageDataRef.current = null;
-                                        forceUpdate(n => n + 1);
-                                    }}
-                                    className="absolute -top-2 -right-2 z-10 w-8 h-8 bg-gray-900 hover:bg-gray-800 text-white rounded-full flex items-center justify-center shadow-lg transition-colors"
-                                    aria-label="Close"
-                                >
-                                    ✕
-                                </button>
-                                <SlippageCard
-                                    symbol={slippageDataRef.current.symbol}
-                                    amount={slippageDataRef.current.amount}
-                                    side={slippageDataRef.current.side}
-                                    quotes={slippageDataRef.current.quotes}
-                                />
-                            </div>
-                        </div>
                     )}
                 </main>
             </div>
