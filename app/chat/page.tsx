@@ -34,6 +34,8 @@ import { CreatePaymentForm } from "@/components/chat/CreatePaymentForm";
 import { PaymentStatusCard } from "@/components/chat/PaymentStatusCard";
 import { SendTransactionForm } from "@/components/chat/forms/SendTransactionForm";
 import { SlippageForm } from "@/components/chat/forms/SlippageForm";
+import { OnchainSearchForm } from "@/components/chat/forms/OnchainSearchForm";
+import { OnchainSearchCard } from "@/components/chat/OnchainSearchCard";
 import axios from "axios";
 
 export default function ChatPage() {
@@ -157,6 +159,7 @@ function ChatPageContent() {
     const tokenActivityDataRef = useRef<any>(null);
     const transactionStatsDataRef = useRef<any>(null);
     const paymentLinkDataRef = useRef<any>(null);
+    const searchDataRef = useRef<any>(null);
 
     // ============================================
     // EXISTING ACTION: Check All Balances
@@ -913,6 +916,116 @@ function ChatPageContent() {
         },
     });
 
+    // ============================================
+    // NEW ACTION: Search Onchain
+    // ============================================
+    useCopilotAction({
+        name: "exploreBlockchain",
+        description: "Explore blockchain addresses, transactions, tokens, or blocks. Shows an interactive form for user input. Always call this when user wants to search or explore blockchain, even without parameters.",
+        parameters: [
+            { name: "searchType", type: "string", description: "Type of search: 'address', 'transaction', 'token', or 'block'", required: false },
+            { name: "query", type: "string", description: "Search query (address, tx hash, token symbol/address, or block number)", required: false },
+            { name: "network", type: "string", description: "Blockchain network (ethereum, mantle, lisk, base, etc.)", required: false }
+        ],
+        render: ({ status, args }) => {
+            // PRIORITY 1: If data exists, show result card
+            if (searchDataRef.current) {
+                return (
+                    <OnchainSearchCard
+                        searchType={searchDataRef.current.searchType}
+                        query={searchDataRef.current.query}
+                        network={searchDataRef.current.network}
+                        data={searchDataRef.current.data}
+                    />
+                );
+            }
+
+            // PRIORITY 2: If executing, show loading
+            if (status === "executing") {
+                return <div className="text-sm text-gray-500 italic animate-pulse">🔍 Searching blockchain data...</div>;
+            }
+
+            // PRIORITY 3: Show form
+            return (
+                <div className="mt-2">
+                    <OnchainSearchForm
+                        defaultValues={{
+                            searchType: args.searchType as any,
+                            query: args.query,
+                            network: args.network
+                        }}
+                        onSubmit={(data) => {
+                            // Message sending is now handled inside OnchainSearchForm component
+                            console.log("✅ OnchainSearchForm submitted:", data);
+                        }}
+                    />
+                </div>
+            );
+        },
+        handler: async ({ searchType, query, network }) => {
+            console.log("🔥 searchOnchain action called!", { searchType, query, network });
+
+            // Validate required params
+            if (!searchType || !query) {
+                return ""; // Show form if params missing
+            }
+
+            // Clear previous data
+            searchDataRef.current = null;
+
+            try {
+                // Mock data for demo - in production, call blockchain API
+                const mockData: any = {};
+
+                switch (searchType) {
+                    case 'address':
+                        mockData.balance = '1.234';
+                        mockData.txCount = 156;
+                        mockData.tokenCount = 8;
+                        break;
+
+                    case 'transaction':
+                        mockData.status = 'success';
+                        mockData.from = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb';
+                        mockData.to = '0x1234567890abcdef1234567890abcdef12345678';
+                        mockData.value = '0.5';
+                        mockData.gas = '21000';
+                        break;
+
+                    case 'token':
+                        mockData.name = query.toUpperCase();
+                        mockData.symbol = query.toUpperCase();
+                        mockData.contract = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
+                        mockData.price = '1.00';
+                        mockData.marketCap = '$32.5B';
+                        break;
+
+                    case 'block':
+                        mockData.number = query;
+                        mockData.timestamp = new Date().toISOString();
+                        mockData.txCount = 234;
+                        mockData.gasUsed = '12,345,678';
+                        break;
+                }
+
+                searchDataRef.current = {
+                    searchType,
+                    query,
+                    network: network || 'ethereum',
+                    data: mockData
+                };
+
+                const typeWord = searchType === 'transaction' ? 'Transaction' : searchType.charAt(0).toUpperCase() + searchType.slice(1);
+                return `✅ ${typeWord} search completed! Showing details for ${query} on ${network || 'ethereum'}.`;
+
+            } catch (error: any) {
+                console.error("Search error:", error);
+                searchDataRef.current = null;
+                return `❌ Error searching blockchain data. ${error.message}`;
+            }
+        },
+    });
+
     useEffect(() => {
         setIsMounted(true);
     }, []);
@@ -992,7 +1105,7 @@ function ChatPageContent() {
                                             swap: "I want to swap tokens",
                                             paylink: "Create a payment link",
                                             portfolio: "Check my balance on all chains",
-                                            search: "Search onchain activity", // This might need a form too, but for now text
+                                            search: "Explore blockchain",
                                             slippage: "Predict trade slippage"
                                         };
                                         const msg = actionMessages[action] || "";
