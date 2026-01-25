@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { BrainCircuit, ArrowRight, ArrowLeftRight } from "lucide-react";
+import { useCopilotChat } from "@copilotkit/react-core";
+import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
 
 interface SlippageFormProps {
     onSubmit: (data: { symbol: string; amount: string; side: "buy" | "sell" }) => void;
@@ -13,14 +15,41 @@ interface SlippageFormProps {
 }
 
 export const SlippageForm = ({ onSubmit, defaultValues }: SlippageFormProps) => {
-    const [symbol, setSymbol] = useState(defaultValues?.symbol || "MNT/USDT");
+    const { appendMessage } = useCopilotChat(); // Get appendMessage directly
+    const [symbol, setSymbol] = useState(defaultValues?.symbol || "BTC/USDT");
     const [amount, setAmount] = useState(defaultValues?.amount || "");
     const [side, setSide] = useState<"buy" | "sell">(defaultValues?.side || "buy");
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (symbol && amount) {
-            onSubmit({ symbol, amount, side });
+
+        if (!symbol || !amount) return;
+
+        console.log("🔥 SLIPPAGE FORM SUBMITTED!", { symbol, amount, side });
+
+        const data = { symbol, amount, side };
+
+        // Build natural language message
+        const message = `Analisis slippage untuk ${side} ${amount} ${symbol}`;
+
+        console.log("📤 Sending message:", message);
+
+        // Send message to AI directly from form
+        try {
+            appendMessage(
+                new TextMessage({
+                    role: MessageRole.User,
+                    content: message
+                })
+            );
+            console.log("✅ Message sent successfully!");
+        } catch (error) {
+            console.error("❌ Error sending message:", error);
+        }
+
+        // Also call onSubmit callback if provided (for backwards compatibility)
+        if (onSubmit) {
+            onSubmit(data);
         }
     };
 

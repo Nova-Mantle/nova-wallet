@@ -422,14 +422,8 @@ function ChatPageContent() {
                             side: args.side as "buy" | "sell"
                         }}
                         onSubmit={(data) => {
-                            const msg = `Analyze slippage for ${data.side} ${data.amount} ${data.symbol}`;
-                            // Don't await - let it send in background
-                            appendMessage(
-                                new TextMessage({
-                                    role: MessageRole.User,
-                                    content: msg,
-                                })
-                            );
+                            // Message sending is now handled inside SlippageForm component
+                            console.log("✅ SlippageForm submitted:", data);
                         }}
                     />
                 </div>
@@ -443,6 +437,9 @@ function ChatPageContent() {
                 return ""; // Show form if params missing
             }
 
+            // Clear previous data to prevent stale state
+            slippageDataRef.current = null;
+
             try {
                 // Determine side if not provided or valid
                 const tradeSide = (side && ['buy', 'sell'].includes(side.toLowerCase())) ? side.toLowerCase() : 'sell';
@@ -453,38 +450,45 @@ function ChatPageContent() {
                     body: JSON.stringify({ symbol: symbol.toUpperCase(), amount, side: tradeSide }),
                 });
 
-                if (!response.ok) throw new Error("Failed to fetch prediction");
+                // If API success, use real data
+                if (response.ok) {
+                    const data = await response.json();
 
-                const data = await response.json();
+                    slippageDataRef.current = {
+                        ...data,
+                        symbol: symbol.toUpperCase(),
+                        amount,
+                        side: tradeSide as "buy" | "sell"
+                    };
 
-                slippageDataRef.current = {
-                    ...data,
-                    symbol: symbol.toUpperCase(),
-                    amount,
-                    side: tradeSide as "buy" | "sell"
-                };
+                    return `✅ Analisis slippage selesai! ${data.best_venue} memberikan harga terbaik dengan slippage ${(data.quotes[0].predicted_slippage_pct * 100).toFixed(3)}%.`;
+                }
 
-                return `✅ Analisis slippage selesai! ${data.best_venue} memberikan harga terbaik dengan slippage ${(data.quotes[0].predicted_slippage_pct * 100).toFixed(3)}%.`;
+                // API failed - use mock data (no throw!)
+                const errorText = await response.text().catch(() => 'Unknown error');
+                console.warn("⚠️ API responded with error:", response.status, errorText);
+
+                // Fall through to mock data below...
             } catch (error: any) {
                 console.error("🔥 predictTradeCost error:", error);
-
-                // Fallback Mock Data if API fails (for demo/resilience)
-                const mockQuotes = [
-                    { exchange: "binance", quote_price: 98000 * (amount || 1), predicted_slippage_pct: 0.001, total_cost: 98150 * (amount || 1), fees: { trading_fee: 50, slippage_cost: 100 } },
-                    { exchange: "kraken", quote_price: 98050 * (amount || 1), predicted_slippage_pct: 0.0015, total_cost: 98250 * (amount || 1), fees: { trading_fee: 60, slippage_cost: 140 } },
-                    { exchange: "coinbase", quote_price: 98100 * (amount || 1), predicted_slippage_pct: 0.002, total_cost: 98400 * (amount || 1), fees: { trading_fee: 80, slippage_cost: 220 } },
-                ];
-
-                slippageDataRef.current = {
-                    best_venue: "binance",
-                    quotes: mockQuotes,
-                    symbol: symbol.toUpperCase(),
-                    amount,
-                    side: (side && ['buy', 'sell'].includes(side.toLowerCase())) ? (side.toLowerCase() as "buy" | "sell") : 'sell'
-                };
-
-                return `⚠️ API Error (${error.message}). Menampilkan data simulasi untuk demo.`;
             }
+
+            // Fallback Mock Data (used when API fails OR errors)
+            const mockQuotes = [
+                { exchange: "binance", quote_price: 98000 * (amount || 1), predicted_slippage_pct: 0.001, total_cost: 98150 * (amount || 1), fees: { trading_fee: 50, slippage_cost: 100 } },
+                { exchange: "kraken", quote_price: 98050 * (amount || 1), predicted_slippage_pct: 0.0015, total_cost: 98250 * (amount || 1), fees: { trading_fee: 60, slippage_cost: 140 } },
+                { exchange: "coinbase", quote_price: 98100 * (amount || 1), predicted_slippage_pct: 0.002, total_cost: 98400 * (amount || 1), fees: { trading_fee: 80, slippage_cost: 220 } },
+            ];
+
+            slippageDataRef.current = {
+                best_venue: "binance",
+                quotes: mockQuotes,
+                symbol: symbol.toUpperCase(),
+                amount,
+                side: (side && ['buy', 'sell'].includes(side.toLowerCase())) ? (side.toLowerCase() as "buy" | "sell") : 'sell'
+            };
+
+            return `⚠️ Menggunakan data simulasi untuk demo. (API tidak tersedia)`;
         },
     });
 
@@ -836,6 +840,8 @@ function ChatPageContent() {
                 return ""; // Show form if params missing
             }
 
+            paymentLinkDataRef.current = null; // Clear previous data
+
             try {
                 const finalReceiver = receiverWallet || address;
                 if (!finalReceiver) {
@@ -898,17 +904,8 @@ function ChatPageContent() {
                             network: args.network
                         }}
                         onSubmit={(formData) => {
-                            // Build natural language message
-                            const walletText = formData.receiverWallet || 'wallet saya';
-                            const message = `Buatkan payment link ${formData.amount} ${formData.token} di network ${formData.network} untuk ${walletText}`;
-
-                            // Send message to AI
-                            appendMessage(
-                                new TextMessage({
-                                    role: MessageRole.User,
-                                    content: message
-                                })
-                            );
+                            // Message sending is now handled inside CreatePaymentForm component
+                            console.log("✅ CreatePaymentForm submitted:", formData);
                         }}
                     />
                 </div>
