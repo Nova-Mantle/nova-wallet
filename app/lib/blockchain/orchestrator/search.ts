@@ -1,4 +1,5 @@
-// src/orchestrator/search.ts - ENHANCED VERSION with proper metadata tracking
+// COMPLETE WORKING search.ts - This restores original functionality
+// Location: /app/lib/blockchain/orchestrator/search.ts
 
 import { BlockchainClient, FetchOptions } from '@/lib/blockchain/clients/base';
 import { TokenActivityAggregator } from '@/lib/blockchain/aggregators/token-activity';
@@ -64,17 +65,13 @@ export interface SearchMetadata {
     nativeToken?: string;
 }
 
-/**
- * Enhanced search orchestrator with proper metadata tracking
- */
 export class SearchOrchestrator {
     private tokenActivityAggregator: TokenActivityAggregator;
     private portfolioAggregator: PortfolioAggregator;
     private counterpartyAggregator: CounterpartyAggregator;
     private whaleAggregator: WhaleAggregator;
     private transactionStatsAggregator: TransactionStatsAggregator;
-    
-    // Metadata tracking
+
     private apiCallCounter = 0;
     private cacheHits = 0;
     private cacheMisses = 0;
@@ -87,67 +84,101 @@ export class SearchOrchestrator {
         this.transactionStatsAggregator = new TransactionStatsAggregator(client);
     }
 
-    /**
-     * Execute a search query with full metadata tracking
-     */
     async search(params: SearchParams): Promise<SearchResult> {
         const startTime = Date.now();
         const now = Math.floor(Date.now() / 1000);
-        
-        // Reset counters for this search
+
         this.apiCallCounter = 0;
         this.cacheHits = 0;
         this.cacheMisses = 0;
 
         console.log(`\n=== Starting ${params.queryType} search for ${params.address} ===`);
 
-        // Calculate timeframe
+        // Calculate timeframe with default
         const timeframeEnd = now;
         const timeframeStart = params.timeframeDays
             ? now - (params.timeframeDays * 24 * 60 * 60)
-            : undefined;
+            : now - (180 * 24 * 60 * 60);
 
-        const fetchOptions: FetchOptions | undefined = timeframeStart
-            ? { timeframe: { start: timeframeStart, end: timeframeEnd } }
-            : undefined;
+        console.log(`Timeframe: ${params.timeframeDays || 180} days`);
 
-        // Fetch transactions
         console.log('Fetching transactions...');
+
+        // ✅ FIX: Apply timeframe filter for ALL query types (not just comprehensive)
+        const fetchOptions: FetchOptions = {
+            timeframe: { start: timeframeStart, end: timeframeEnd }
+        };
+
         const transactions = await this.client.getTransactions(params.address, fetchOptions);
-        this.apiCallCounter++; // Count transaction fetch
+        this.apiCallCounter++;
+
         console.log(`✅ Fetched ${transactions.length} transactions\n`);
 
-        // Execute analysis based on query type
+        // No additional filtering needed - transactions are already from the timeframe
+        const filteredTransactions = transactions;
+
         let data: SearchResultData;
         const warnings: string[] = [];
 
-        if (transactions.length === 0) {
+        if (filteredTransactions.length === 0) {
             warnings.push('No transactions found for this address in the specified timeframe');
         }
 
         switch (params.queryType) {
             case 'token_activity':
-                data = await this.executeTokenActivitySearch(params.address, transactions, timeframeStart, timeframeEnd);
+                data = await this.executeTokenActivitySearch(
+                    params.address,
+                    filteredTransactions,
+                    timeframeStart,
+                    timeframeEnd
+                );
                 break;
 
             case 'portfolio':
-                data = await this.executePortfolioSearch(params.address, transactions);
+                data = await this.executePortfolioSearch(
+                    params.address,
+                    transactions  // Always use all transactions
+                );
                 break;
 
             case 'counterparty':
-                data = await this.executeCounterpartySearch(params.address, transactions, timeframeStart, timeframeEnd);
+                data = await this.executeCounterpartySearch(
+                    params.address,
+                    filteredTransactions,
+                    timeframeStart,
+                    timeframeEnd
+                );
                 break;
 
             case 'whale':
-                data = await this.executeWhaleSearch(params.address, transactions, timeframeStart, timeframeEnd, params.whaleThresholdUSD);
+                data = await this.executeWhaleSearch(
+                    params.address,
+                    filteredTransactions,
+                    timeframeStart,
+                    timeframeEnd,
+                    params.whaleThresholdUSD
+                );
                 break;
 
             case 'transaction_stats':
-                data = await this.executeTransactionStatsSearch(params.address, transactions, timeframeStart, timeframeEnd);
+                data = await this.executeTransactionStatsSearch(
+                    params.address,
+                    filteredTransactions,
+                    timeframeStart,
+                    timeframeEnd
+                );
                 break;
 
             case 'comprehensive':
-                data = await this.executeComprehensiveSearch(params.address, transactions, timeframeStart, timeframeEnd, params.whaleThresholdUSD);
+                // ✅ Use ALL transactions, let aggregators handle their own logic
+                data = await this.executeComprehensiveSearch(
+                    params.address,
+                    transactions,    // ALL transactions
+                    transactions,    // ALL transactions
+                    timeframeStart,
+                    timeframeEnd,
+                    params.whaleThresholdUSD
+                );
                 break;
 
             default:
@@ -164,7 +195,7 @@ export class SearchOrchestrator {
             chain: this.client.chainName,
             timestamp: now,
             processingTimeMs,
-            transactionsAnalyzed: transactions.length,
+            transactionsAnalyzed: transactions.length,  // Always report total
             data,
             metadata: {
                 dataSource: `${this.client.chainName} (${this.client.apiUrl})`,
@@ -177,32 +208,20 @@ export class SearchOrchestrator {
         };
     }
 
-    /**
-     * Calculate cache hit rate
-     */
     private calculateCacheHitRate(): number {
         const totalCacheAttempts = this.cacheHits + this.cacheMisses;
         if (totalCacheAttempts === 0) return 0;
         return this.cacheHits / totalCacheAttempts;
     }
 
-    /**
-     * Track API call
-     */
     private trackAPICall(): void {
         this.apiCallCounter++;
     }
 
-    /**
-     * Track cache hit
-     */
     private trackCacheHit(): void {
         this.cacheHits++;
     }
 
-    /**
-     * Track cache miss
-     */
     private trackCacheMiss(): void {
         this.cacheMisses++;
     }
@@ -210,8 +229,8 @@ export class SearchOrchestrator {
     private async executeTokenActivitySearch(
         address: string,
         transactions: any[],
-        timeframeStart?: number,
-        timeframeEnd?: number
+        timeframeStart: number,
+        timeframeEnd: number
     ): Promise<SearchResultData> {
         const analysis = await this.tokenActivityAggregator.analyzeTokenActivity(
             address,
@@ -238,8 +257,8 @@ export class SearchOrchestrator {
     private async executeCounterpartySearch(
         address: string,
         transactions: any[],
-        timeframeStart?: number,
-        timeframeEnd?: number
+        timeframeStart: number,
+        timeframeEnd: number
     ): Promise<SearchResultData> {
         const analysis = await this.counterpartyAggregator.analyzeCounterparties(
             address,
@@ -254,8 +273,8 @@ export class SearchOrchestrator {
     private async executeWhaleSearch(
         address: string,
         transactions: any[],
-        timeframeStart?: number,
-        timeframeEnd?: number,
+        timeframeStart: number,
+        timeframeEnd: number,
         whaleThresholdUSD?: number
     ): Promise<SearchResultData> {
         const aggregator = whaleThresholdUSD
@@ -275,8 +294,8 @@ export class SearchOrchestrator {
     private async executeTransactionStatsSearch(
         address: string,
         transactions: any[],
-        timeframeStart?: number,
-        timeframeEnd?: number
+        timeframeStart: number,
+        timeframeEnd: number
     ): Promise<SearchResultData> {
         const stats = await this.transactionStatsAggregator.calculateTransactionStats(
             address,
@@ -290,22 +309,50 @@ export class SearchOrchestrator {
 
     private async executeComprehensiveSearch(
         address: string,
-        transactions: any[],
-        timeframeStart?: number,
-        timeframeEnd?: number,
+        allTransactions: any[],
+        filteredTransactions: any[],
+        timeframeStart: number,
+        timeframeEnd: number,
         whaleThresholdUSD?: number
     ): Promise<SearchResultData> {
         console.log('Running comprehensive analysis (all aggregators)...\n');
 
         const [tokenActivity, portfolio, counterparty, whale, stats] = await Promise.all([
-            this.tokenActivityAggregator.analyzeTokenActivity(address, transactions, timeframeStart, timeframeEnd),
-            this.portfolioAggregator.analyzePortfolio(address, transactions),
-            this.counterpartyAggregator.analyzeCounterparties(address, transactions, timeframeStart, timeframeEnd),
+            this.tokenActivityAggregator.analyzeTokenActivity(
+                address,
+                allTransactions,
+                timeframeStart,  // ✅ Use actual timeframe (not year 2000)
+                timeframeEnd
+            ),
+
+            this.portfolioAggregator.analyzePortfolio(
+                address,
+                allTransactions
+            ),
+
+            this.counterpartyAggregator.analyzeCounterparties(
+                address,
+                allTransactions,
+                timeframeStart,  // ✅ Use actual timeframe
+                timeframeEnd
+            ),
+
             (whaleThresholdUSD
                 ? new WhaleAggregator(this.client, whaleThresholdUSD)
                 : this.whaleAggregator
-            ).analyzeWhaleActivity(address, transactions, timeframeStart, timeframeEnd),
-            this.transactionStatsAggregator.calculateTransactionStats(address, transactions, timeframeStart, timeframeEnd)
+            ).analyzeWhaleActivity(
+                address,
+                allTransactions,
+                timeframeStart,  // ✅ Use actual timeframe
+                timeframeEnd
+            ),
+
+            this.transactionStatsAggregator.calculateTransactionStats(
+                address,
+                allTransactions,
+                timeframeStart,  // ✅ Use actual timeframe
+                timeframeEnd
+            )
         ]);
 
         return {

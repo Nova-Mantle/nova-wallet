@@ -308,29 +308,47 @@ export class PortfolioAggregator {
     transactions: Transaction[],
     address: string,
     currentTimestamp: number,
-    shouldPrice: boolean = true // ✅ NEW: Flag to control pricing
+    shouldPrice: boolean = true
   ): Promise<PortfolioHolding> {
-    // ✅ OPTIMIZATION: Get token info from first transaction to avoid metadata call
+    // ✅ ADD THIS AT THE VERY START
+    console.log(`   🔑 calculateTokenHolding called with tokenAddress: ${tokenAddress}`);
+
+    // Get token info
     const firstTx = transactions[0];
     const tokenSymbolFromTx = firstTx?.tokenSymbol || 'UNKNOWN';
+
+    // ✅ FIXED - Remove tokenAddress field
+    console.log(`   📦 First transaction data:`, {
+      symbol: tokenSymbolFromTx,
+      contractAddress: firstTx?.contractAddress
+    });
     const tokenDecimalFromTx = firstTx?.tokenDecimal ? parseInt(firstTx.tokenDecimal) : 18;
-    
-    // Only fetch full metadata if we're pricing this token (top 20)
+
+    // ALWAYS prefer transaction data if available (Lisk/Mantle have this)
     let tokenInfo;
-    if (shouldPrice) {
-      tokenInfo = await this.client.getTokenMetadata(tokenAddress);
-    } else {
-      // Use transaction data to avoid API call
+    if (tokenSymbolFromTx && tokenSymbolFromTx !== 'UNKNOWN' && tokenSymbolFromTx !== '') {
+      // Use transaction data (fastest and most accurate for Lisk/Mantle)
       tokenInfo = {
         symbol: tokenSymbolFromTx,
         decimals: tokenDecimalFromTx,
+        address: tokenAddress,
+        name: tokenSymbolFromTx // Use symbol as name
+      };
+    } else if (shouldPrice) {
+      // Fallback to API only if no transaction data (Ethereum needs this)
+      tokenInfo = await this.client.getTokenMetadata(tokenAddress);
+    } else {
+      // Ultimate fallback
+      tokenInfo = {
+        symbol: 'UNKNOWN',
+        decimals: 18,
         address: tokenAddress
       };
     }
 
     // Detect actual decimals from first transaction
     const sampleValue = firstTx?.value || '0';
-    const actualDecimals = shouldPrice 
+    const actualDecimals = shouldPrice
       ? await this.getActualDecimals(tokenAddress, sampleValue)
       : tokenDecimalFromTx;
 
@@ -382,18 +400,26 @@ export class PortfolioAggregator {
       balance = 0;
     }
 
-    // ✅ MODIFIED: Only get current price if shouldPrice is true
+    // Get current price (MODIFIED - use getCurrentTokenPrice)
     let currentPriceUSD = 0;
-    if (shouldPrice) {
+    if (shouldPrice && balance > 0.000001) {
       try {
-        // Add timeout protection
-        const pricePromise = this.client.getHistoricalPrice(tokenAddress, currentTimestamp);
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), PRICE_FETCH_TIMEOUT_MS)
-        );
+        console.log(`   💲 Fetching current price for ${tokenInfo.symbol}...`);
+        console.log(`   🎯 Calling getCurrentTokenPrice with: ${tokenAddress}`);
 
-        const currentPrice = await Promise.race([pricePromise, timeoutPromise]) as any;
-        currentPriceUSD = currentPrice.priceUSD;
+        // ✅ Use getCurrentTokenPrice if available
+        if ('getCurrentTokenPrice' in this.client) {
+          currentPriceUSD = await (this.client as any).getCurrentTokenPrice(tokenAddress);
+        } else {
+          // Fallback
+          const pricePromise = this.client.getHistoricalPrice(tokenAddress, currentTimestamp);
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('timeout')), PRICE_FETCH_TIMEOUT_MS)
+          );
+
+          const currentPrice = await Promise.race([pricePromise, timeoutPromise]) as any;
+          currentPriceUSD = currentPrice.priceUSD;
+        }
       } catch (error: unknown) {
         // ✅ FIXED: Properly type error
         const errorMessage = error instanceof Error ? error.message : 'unknown error';

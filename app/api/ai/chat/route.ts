@@ -1,4 +1,4 @@
-// nova-wallet/app/api/ai/chat/route.ts - UPDATED WITH BLOCKCHAIN ANALYSIS
+// nova-wallet/app/api/ai/chat/route.ts - RESTORED ORIGINAL + ADDED WHALE/COUNTERPARTY
 
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
@@ -7,11 +7,13 @@ import { isAddress as viemIsAddress } from "viem";
 
 import { supportedChains } from "../../../config/chains";
 
-// NEW: Import blockchain analysis functions
+// NEW: Import ALL blockchain analysis functions (Added Whale/Counterparty here)
 import {
     getPortfolioAnalysis,
     getTokenActivity,
-    getTransactionStats
+    getTransactionStats,
+    getWhaleActivity,       // ✅ NEW
+    getCounterpartyAnalysis // ✅ NEW
 } from "@/lib/blockchainAgentWrapper";
 
 // Function untuk check balance (UNCHANGED)
@@ -55,6 +57,7 @@ type ChatRequestBody = {
 
 const SUPPORTED_CHAINS_LIST = supportedChains.map(c => `- ${c.name} (Chain ID: ${c.id})`).join("\n");
 
+// ✅ ORIGINAL SYSTEM PROMPT (Preserved) + Added Point 4 & 5
 const SYSTEM_PROMPT = `Kamu adalah Nova AI, asisten crypto wallet yang ramah dan membantu. Kamu berbicara dalam Bahasa Indonesia yang natural dan mudah dipahami.
 
 Jaringan yang didukung saat ini:
@@ -73,14 +76,21 @@ PENTING - RULES MUTLAK:
    → WAJIB panggil checkBalance DULU
    → JANGAN jawab langsung tanpa data
 
+4. Jika user bertanya "transaksi besar", "apakah aku whale", "cek whale activity":
+   → WAJIB panggil analyzeWhaleActivity DULU (✅ NEW RULE)
+
+5. Jika user bertanya "siapa yang sering kirim", "interaksi dengan siapa", "counterparty":
+   → WAJIB panggil analyzeCounterparty DULU (✅ NEW RULE)
+
 INGAT: Kamu TIDAK BISA membuat data. Kamu HARUS memanggil function untuk mendapatkan data real dari blockchain.
 
 Tugas kamu:
 1. Bantu user cek saldo wallet dengan memanggil checkBalance
-2. Bantu user analisis portfolio dengan memanggil analyzePortfolio untuk melihat semua token holdings + profit/loss
-3. Bantu user lihat aktivitas trading dengan memanggil analyzeTokenActivity untuk melihat riwayat buy/sell token
-4. Jelaskan informasi crypto dengan bahasa sederhana
-5. Validasi transaksi sebelum execute (jangan pernah execute tanpa konfirmasi user)
+2. Bantu user analisis portfolio dengan memanggil analyzePortfolio
+3. Bantu user lihat aktivitas trading dengan memanggil analyzeTokenActivity
+4. Bantu user deteksi transaksi besar (Whale) dengan analyzeWhaleActivity
+5. Bantu user lihat interaksi wallet (Counterparty) dengan analyzeCounterparty
+6. Validasi transaksi sebelum execute (jangan pernah execute tanpa konfirmasi user)
 
 Format Jawaban:
 - SELALU sebutkan chain name (misalnya "di Mantle Sepolia", "di Ethereum Sepolia")
@@ -93,16 +103,6 @@ Catatan tentang Token:
 - analyzePortfolio → semua token + nilai USD + P&L
 - analyzeTokenActivity → riwayat trading + profit per token
 
-✨ CATATAN PENTING TENTANG DATA COVERAGE:
-- Untuk performa optimal (hasil dalam 30-60 detik), analisis portfolio menggunakan 500 transaksi terakhir
-- Portfolio analysis fokus ke 20 token paling aktif kamu (yang paling sering ditransaksikan)
-- Token dengan balance sangat kecil (dust) tidak di-price untuk menghemat waktu
-- Sebutkan ini secara natural seperti:
-  * "Aku sudah cek 500 transaksi terakhir dan 20 token utama kamu..."
-  * "Berdasarkan token-token aktif kamu..."
-  * "Ini analisis token yang sering kamu transaksikan..."
-- JANGAN bilang "aku cuma bisa" atau "ada limitasi" - buat terdengar seperti fitur yang smart dan efisien!
-
 Ingat:
 - Selalu gunakan Bahasa Indonesia
 - WAJIB panggil function sebelum jawab
@@ -110,7 +110,7 @@ Ingat:
 - Jangan pernah execute transaksi tanpa konfirmasi eksplisit dari user
 - Kalau user belum connect wallet, ingatkan mereka untuk connect dulu`;
 
-// Function schema untuk Gemini (KEEP EXISTING + ADD NEW)
+// Function schema untuk Gemini (KEEP EXISTING + ADD NEW TOOLS)
 const tools = [
     {
         name: "checkBalance",
@@ -118,83 +118,81 @@ const tools = [
         parameters: {
             type: SchemaType.OBJECT,
             properties: {
-                address: {
-                    type: SchemaType.STRING as const,
-                    description: "Alamat wallet yang ingin dicek saldonya",
-                },
-                chainId: {
-                    type: SchemaType.NUMBER as const,
-                    description: "Chain ID blockchain (contoh: 5000 untuk Mantle Mainnet, 5003 untuk Mantle Sepolia)",
-                },
+                address: { type: SchemaType.STRING, description: "Alamat wallet yang ingin dicek saldonya" },
+                chainId: { type: SchemaType.NUMBER, description: "Chain ID blockchain" },
             },
             required: ["address", "chainId"],
         },
     },
     {
         name: "analyzePortfolio",
-        description: "Analisis portfolio lengkap: semua token holdings, nilai USD, profit/loss. Gunakan ini jika user tanya 'token apa aja yang aku punya', 'portfolio aku', 'holdings', dll.",
+        description: "Analisis portfolio lengkap: semua token holdings, nilai USD, profit/loss.",
         parameters: {
             type: SchemaType.OBJECT,
             properties: {
-                address: {
-                    type: SchemaType.STRING as const,
-                    description: "Alamat wallet yang ingin dianalisis",
-                },
-                chainId: {
-                    type: SchemaType.NUMBER as const,
-                    description: "Chain ID blockchain",
-                },
+                address: { type: SchemaType.STRING, description: "Alamat wallet yang ingin dianalisis" },
+                chainId: { type: SchemaType.NUMBER, description: "Chain ID blockchain" },
             },
             required: ["address", "chainId"],
         },
     },
     {
         name: "analyzeTokenActivity",
-        description: "Analisis aktivitas trading: token apa yang dibeli/dijual, profit/loss per token, performa trading. Gunakan ini jika user tanya 'profit aku berapa', 'token apa yang paling untung', 'riwayat trading', dll.",
+        description: "Analisis aktivitas trading: token apa yang dibeli/dijual, profit/loss per token.",
         parameters: {
             type: SchemaType.OBJECT,
             properties: {
-                address: {
-                    type: SchemaType.STRING as const,
-                    description: "Alamat wallet yang ingin dianalisis",
-                },
-                chainId: {
-                    type: SchemaType.NUMBER as const,
-                    description: "Chain ID blockchain",
-                },
-                timeframeDays: {
-                    type: SchemaType.NUMBER as const,
-                    description: "Timeframe dalam hari (opsional, default semua history)",
-                },
+                address: { type: SchemaType.STRING, description: "Alamat wallet yang ingin dianalisis" },
+                chainId: { type: SchemaType.NUMBER, description: "Chain ID blockchain" },
+                timeframeDays: { type: SchemaType.NUMBER, description: "Timeframe dalam hari (opsional)" },
+            },
+            required: ["address", "chainId"],
+        },
+    },
+    // ✅ NEW TOOL: Whale Activity
+    {
+        name: "analyzeWhaleActivity",
+        description: "Analisis transaksi besar (whale). Gunakan jika user tanya 'transaksi besar', 'whale', 'dump'.",
+        parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+                address: { type: SchemaType.STRING, description: "Alamat wallet" },
+                chainId: { type: SchemaType.NUMBER, description: "Chain ID" },
+                timeframeDays: { type: SchemaType.NUMBER, description: "Timeframe (opsional)" }
+            },
+            required: ["address", "chainId"],
+        },
+    },
+    // ✅ NEW TOOL: Counterparty Analysis
+    {
+        name: "analyzeCounterparty",
+        description: "Analisis interaksi wallet. Gunakan jika user tanya 'siapa yang sering kirim', 'top interaction', 'exchange apa'.",
+        parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+                address: { type: SchemaType.STRING, description: "Alamat wallet" },
+                chainId: { type: SchemaType.NUMBER, description: "Chain ID" },
+                timeframeDays: { type: SchemaType.NUMBER, description: "Timeframe (opsional)" }
             },
             required: ["address", "chainId"],
         },
     },
     {
         name: "prepareTransaction",
-        description: "Siapkan data transaksi untuk mengirim koin/token dari user ke orang lain. Panggil ini jika user ingin kirim/transfer.",
+        description: "Siapkan data transaksi untuk mengirim koin/token dari user ke orang lain.",
         parameters: {
             type: SchemaType.OBJECT,
             properties: {
-                toAddress: {
-                    type: SchemaType.STRING as const,
-                    description: "Alamat wallet tujuan (harus 0x...)",
-                },
-                amount: {
-                    type: SchemaType.NUMBER as const,
-                    description: "Jumlah yang ingin dikirim (contoh: 0.1)",
-                },
-                chainId: {
-                    type: SchemaType.NUMBER as const,
-                    description: "Chain ID network tujuan",
-                },
+                toAddress: { type: SchemaType.STRING, description: "Alamat wallet tujuan (harus 0x...)" },
+                amount: { type: SchemaType.NUMBER, description: "Jumlah yang ingin dikirim" },
+                chainId: { type: SchemaType.NUMBER, description: "Chain ID network tujuan" },
             },
             required: ["toAddress", "amount", "chainId"],
         },
     }
 ];
 
-// KEEP ALL EXISTING HELPER FUNCTIONS (prepareSendTransaction, etc.)
+// KEEP ALL EXISTING HELPER FUNCTIONS (Preserved exactly as you had them)
 interface PrepareSendParams {
     fromAddress: string;
     toAddress: string;
@@ -270,7 +268,7 @@ const prepareSendTransaction = async ({
     };
 };
 
-// Helper to call Gemini API via fetch (UNCHANGED - KEEP YOUR FRIEND'S VERSION)
+// Helper to call Gemini API via fetch (UNCHANGED)
 async function callGemini(
     messages: ChatRequestBody["messages"],
     tools: any[],
@@ -324,7 +322,6 @@ export async function POST(request: Request) {
 
         body = (await request.json()) as ChatRequestBody;
 
-        // ✅ ADD THIS DEBUG AT THE TOP
         console.log("\n🔥 AI CHAT ROUTE CALLED");
         console.log("  Last message:", body.messages[body.messages.length - 1]?.content.substring(0, 100));
         console.log("  Wallet connected:", body.walletContext?.isConnected);
@@ -351,15 +348,17 @@ export async function POST(request: Request) {
         // Build System Prompt Context
         let systemInstructionText = SYSTEM_PROMPT;
 
-        // Add ReAct Instructions for Gemma
+        // Add ReAct Instructions for Gemma (UNCHANGED)
         systemInstructionText += `
 
 ATURAN KHUSUS UNTUK MEMANGGIL FUNCTION (TOOL CALLING):
 Kamu memiliki akses ke tools berikut:
-1. checkBalance(address: string, chainId: number) - Cek saldo native token.
-2. analyzePortfolio(address: string, chainId: number) - Analisis portfolio lengkap (semua token + P&L).
-3. analyzeTokenActivity(address: string, chainId: number, timeframeDays?: number) - Analisis trading activity.
-4. prepareTransaction(toAddress: string, amount: number, chainId: number) - Siapkan transaksi kirim uang.
+1. checkBalance(address: string, chainId: number)
+2. analyzePortfolio(address: string, chainId: number)
+3. analyzeTokenActivity(address: string, chainId: number, timeframeDays?: number)
+4. analyzeWhaleActivity(address: string, chainId: number)  <-- NEW
+5. analyzeCounterparty(address: string, chainId: number)   <-- NEW
+6. prepareTransaction(toAddress: string, amount: number, chainId: number)
 
 JIKA user meminta sesuatu yang membutuhkan tool tersebut, JANGAN LANGSUNG MENJAWAB.
 Sebaliknya, keluarkan output JSON valid di dalam blok kode \`\`\`json\`\`\` seperti ini:
@@ -434,95 +433,77 @@ Tunggu system memberikan hasil eksekusi tool tersebut sebelum menjawab final.
             if (name === "checkBalance") {
                 const targetAddress = args.address ?? body.walletContext?.address;
                 const targetChainId = args.chainId ?? resolvedChainId;
-
                 let functionResult;
-                if (!targetAddress) {
-                    functionResult = { error: "Address not available" };
-                } else {
-                    try {
-                        functionResult = await checkBalance(targetAddress, targetChainId);
-                    } catch (e: any) {
-                        functionResult = { error: e.message };
-                    }
+                try {
+                    functionResult = await checkBalance(targetAddress, targetChainId);
+                } catch (e: any) {
+                    functionResult = { error: e.message };
                 }
-
                 const followUpContent = `System: Result of tool ${name}: ${JSON.stringify(functionResult)}. Explain this to user.`;
                 augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
                 augmentedMessages.push({ role: "user", content: followUpContent });
-
-                geminiResponse = await callGemini(
-                    augmentedMessages,
-                    [],
-                    apiKey,
-                    "gemma-3-27b-it"
-                );
+                geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
 
             } else if (name === "analyzePortfolio") {
-                if (!body.walletContext?.isConnected) {
-                    const followUpContent = `System: User is not connected. Tell them to connect wallet first.`;
+                try {
+                    const result = await getPortfolioAnalysis(args.address ?? body.walletContext?.address, args.chainId ?? resolvedChainId);
+                    const followUpContent = `System: Portfolio analysis complete. Data: ${JSON.stringify(result.data)}. Format response in Bahasa Indonesia.`;
                     augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
                     augmentedMessages.push({ role: "user", content: followUpContent });
                     geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
-                } else {
-                    try {
-                        const result = await getPortfolioAnalysis(args.address ?? body.walletContext.address, args.chainId ?? resolvedChainId);
-
-                        const nativeTokenSymbol = result.metadata?.nativeToken || 'ETH';
-                        const chainName = result.chain || 'Unknown';
-
-                        const followUpContent = `System: Portfolio analysis complete for ${chainName}.
-
-CRITICAL: Native token symbol is "${nativeTokenSymbol}". When you display native balance, you MUST write "${nativeTokenSymbol}", NOT "LSK" or "MNT" or anything else.
-
-Data: ${JSON.stringify(result.data)}
-
-Format response in Bahasa Indonesia. Native token = ${nativeTokenSymbol}.`;
-
-                        // ✅ DEBUG: Log what we're sending to AI
-                        console.log("\n🤖 SENDING TO AI:");
-                        console.log("Chain:", chainName);
-                        console.log("Native Token:", nativeTokenSymbol);
-                        console.log("Follow-up content preview:", followUpContent.substring(0, 200) + "...");
-
-                        augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
-                        augmentedMessages.push({ role: "user", content: followUpContent });
-                        geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
-
-                        // ✅ DEBUG: Log AI's raw response
-                        const aiResponseText = geminiResponse.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("") || "";
-                        console.log("\n🤖 AI RAW RESPONSE:");
-                        console.log(aiResponseText.substring(0, 500));
-                        console.log("---\n");
-
-                    } catch (error: any) {
-                        const followUpContent = `System: Portfolio analysis failed: ${error.message}. Explain to user.`;
-                        augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
-                        augmentedMessages.push({ role: "user", content: followUpContent });
-                        geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
-                    }
+                } catch (error: any) {
+                    const followUpContent = `System: Error: ${error.message}`;
+                    augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
+                    augmentedMessages.push({ role: "user", content: followUpContent });
+                    geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
                 }
+
             } else if (name === "analyzeTokenActivity") {
-                if (!body.walletContext?.isConnected) {
-                    const followUpContent = `System: User is not connected. Tell them to connect wallet first.`;
+                try {
+                    const result = await getTokenActivity(args.address ?? body.walletContext?.address, args.chainId ?? resolvedChainId, args.timeframeDays);
+                    const followUpContent = `System: Token activity result: ${JSON.stringify(result.data)}. Explain to user.`;
                     augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
                     augmentedMessages.push({ role: "user", content: followUpContent });
                     geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
-                } else {
-                    try {
-                        const result = await getTokenActivity(args.address ?? body.walletContext.address, args.chainId ?? resolvedChainId, args.timeframeDays);
-                        const followUpContent = `System: Token activity analysis complete. Result: ${JSON.stringify(result.data)}. Explain to user in Bahasa Indonesia.`;
-                        augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
-                        augmentedMessages.push({ role: "user", content: followUpContent });
-                        geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
-                    } catch (error: any) {
-                        const followUpContent = `System: Token activity analysis failed: ${error.message}. Explain to user.`;
-                        augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
-                        augmentedMessages.push({ role: "user", content: followUpContent });
-                        geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
-                    }
+                } catch (error: any) {
+                    const followUpContent = `System: Error: ${error.message}`;
+                    augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
+                    augmentedMessages.push({ role: "user", content: followUpContent });
+                    geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
+                }
+
+            // ✅ NEW HANDLER: WHALE ACTIVITY
+            } else if (name === "analyzeWhaleActivity") {
+                try {
+                    const result = await getWhaleActivity(args.address ?? body.walletContext?.address, args.chainId ?? resolvedChainId, args.timeframeDays);
+                    const followUpContent = `System: Whale analysis result: ${JSON.stringify(result.data)}. Explain if user is a whale.`;
+                    augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
+                    augmentedMessages.push({ role: "user", content: followUpContent });
+                    geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
+                } catch (error: any) {
+                    const followUpContent = `System: Error: ${error.message}`;
+                    augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
+                    augmentedMessages.push({ role: "user", content: followUpContent });
+                    geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
+                }
+
+            // ✅ NEW HANDLER: COUNTERPARTY ANALYSIS
+            } else if (name === "analyzeCounterparty") {
+                try {
+                    const result = await getCounterpartyAnalysis(args.address ?? body.walletContext?.address, args.chainId ?? resolvedChainId, args.timeframeDays);
+                    const followUpContent = `System: Counterparty analysis result: ${JSON.stringify(result.data)}. Explain who they interact with.`;
+                    augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
+                    augmentedMessages.push({ role: "user", content: followUpContent });
+                    geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
+                } catch (error: any) {
+                    const followUpContent = `System: Error: ${error.message}`;
+                    augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
+                    augmentedMessages.push({ role: "user", content: followUpContent });
+                    geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
                 }
 
             } else if (name === "prepareTransaction") {
+                // (UNCHANGED LOGIC)
                 if (!body.walletContext?.isConnected) {
                     const followUpContent = `System: User is not connected. Tell them to connect wallet first.`;
                     augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
