@@ -312,6 +312,7 @@ Keep responses helpful and concise!`;
     const portfolioDataRef = useRef<any>(null);
     const tokenActivityDataRef = useRef<any>(null);
     const transactionStatsDataRef = useRef<any>(null);
+    const searchDataRef = useRef<any>(null);
 
 
     // ============================================
