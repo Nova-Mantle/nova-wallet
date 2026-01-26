@@ -147,9 +147,10 @@ export interface WhaleAnalysis {
   address: string;
   timeframeStart: number;
   timeframeEnd: number;
+  whaleThresholdUSD: number; 
   whaleTransactions: WhaleTransaction[];
   totalWhaleValueUSD: number;
-  largestTransaction: WhaleTransaction;
+  largestTransaction: WhaleTransaction | null; 
   numWhaleTransactions: number;
   averageWhaleTransactionUSD: number;
   exchangeFlows: {
@@ -158,7 +159,6 @@ export interface WhaleAnalysis {
     netExchangeFlow: number;
   };
 }
-
 /**
  * Basic transaction statistics
  */

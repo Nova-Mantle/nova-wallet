@@ -550,26 +550,121 @@ export function getBlockchainClient(chainId: number): BlockchainClient {
 
 // --- Orchestrator Helpers ---
 
+// ============================================
+// CRITICAL: ADDRESS VALIDATION
+// ============================================
+function validateEthereumAddress(address: string): void {
+    // Check if address starts with 0x
+    if (!address.startsWith('0x')) {
+        throw new Error(
+            `❌ Invalid address format: "${address}"\n` +
+            `Address must start with '0x'. The system requires strict formatting.\n` +
+            `Please verify the input.`
+        );
+    }
+
+    // Check if address is exactly 42 characters
+    if (address.length !== 42) {
+        throw new Error(
+            `❌ Invalid address length: "${address}"\n` +
+            `Address must be exactly 42 characters (including '0x').\n` +
+            `Received: ${address.length} characters.`
+        );
+    }
+
+    // Check if all characters after 0x are valid hex
+    const hexPart = address.slice(2);
+    if (!/^[a-fA-F0-9]{40}$/.test(hexPart)) {
+        throw new Error(
+            `❌ Invalid address format: "${address}"\n` +
+            `Address must contain only hexadecimal characters (0-9, a-f, A-F) after '0x'.`
+        );
+    }
+
+    // If we get here, address is valid
+}
+
+// ============================================
+// EXPORTED FUNCTIONS (WITH VALIDATION!)
+// ============================================
+
 export async function getPortfolioAnalysis(address: string, chainId: number) {
     try {
+        validateEthereumAddress(address); // 🔥 VALIDATE FIRST
         const client = getBlockchainClient(chainId);
         const orchestrator = new SearchOrchestrator(client);
         return await orchestrator.search({ address, queryType: 'portfolio' });
-    } catch (error) { console.error('[Portfolio Analysis Error]', error); throw error; }
+    } catch (error) {
+        console.error('[Portfolio Analysis Error]', error);
+        throw error;
+    }
 }
 
 export async function getTokenActivity(address: string, chainId: number, timeframeDays?: number) {
     try {
+        validateEthereumAddress(address); // 🔥 VALIDATE FIRST
         const client = getBlockchainClient(chainId);
         const orchestrator = new SearchOrchestrator(client);
         return await orchestrator.search({ address, queryType: 'token_activity', timeframeDays });
-    } catch (error) { console.error('[Token Activity Error]', error); throw error; }
+    } catch (error) {
+        console.error('[Token Activity Error]', error);
+        throw error;
+    }
 }
 
 export async function getTransactionStats(address: string, chainId: number) {
     try {
+        validateEthereumAddress(address); // 🔥 VALIDATE FIRST
         const client = getBlockchainClient(chainId);
         const orchestrator = new SearchOrchestrator(client);
         return await orchestrator.search({ address, queryType: 'transaction_stats' });
-    } catch (error) { console.error('[Transaction Stats Error]', error); throw error; }
+    } catch (error) {
+        console.error('[Transaction Stats Error]', error);
+        throw error;
+    }
+}
+
+export async function getCounterpartyAnalysis(address: string, chainId: number, timeframeDays?: number) {
+    validateEthereumAddress(address); // 🔥 VALIDATE FIRST
+    const client = getBlockchainClient(chainId);
+    const orchestrator = new SearchOrchestrator(client);
+    return await orchestrator.search({
+        address,
+        queryType: 'counterparty',
+        timeframeDays
+    });
+}
+
+export async function getWhaleActivity(
+    address: string,
+    chainId: number,
+    timeframeDays?: number,
+    whaleThresholdUSD?: number
+) {
+    validateEthereumAddress(address); // 🔥 VALIDATE FIRST
+    const client = getBlockchainClient(chainId);
+    const orchestrator = new SearchOrchestrator(client);
+    return await orchestrator.search({
+        address,
+        queryType: 'whale',
+        timeframeDays,
+        whaleThresholdUSD
+    });
+}
+
+export async function getComprehensiveAnalysis(
+    address: string,
+    chainId: number,
+    timeframeDays?: number,
+    whaleThresholdUSD?: number
+) {
+    validateEthereumAddress(address); // 🔥 VALIDATE FIRST
+    const client = getBlockchainClient(chainId);
+    const orchestrator = new SearchOrchestrator(client);
+    return await orchestrator.search({
+        address,
+        queryType: 'comprehensive',
+        timeframeDays,
+        whaleThresholdUSD
+    });
 }

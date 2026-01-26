@@ -23,7 +23,7 @@ export const CTASection = () => {
                         >
                             <div className="relative w-full h-[400px]">
                                 <Image
-                                    src="/let-nova-handle-the-complexity.png"
+                                    src="/landing-page/let-nova-handle-the-complexity.png"
                                     alt="Let Nova Handle the Complexity"
                                     fill
                                     className="object-contain"

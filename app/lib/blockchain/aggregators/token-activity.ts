@@ -13,32 +13,19 @@ import {
  */
 function detectActualDecimals(rawValue: string, reportedDecimals: number): number {
   try {
-    // Count trailing zeros in raw value
-    const trimmed = rawValue.replace(/0+$/, '');
-    const trailingZeros = rawValue.length - trimmed.length;
-
-    // If we have 18 trailing zeros but token reports 9 decimals, it's likely using 18
-    if (reportedDecimals === 9 && trailingZeros >= 18) {
-      return 18;
+    // If the reported decimals is 0 or 1, that's suspicious for an ERC20.
+    // Most legitimate tokens have at least 6.
+    if (reportedDecimals <= 1) {
+      // Check trailing zeros to guess.
+      const trimmed = rawValue.replace(/0+$/, '');
+      const trailingZeros = rawValue.length - trimmed.length;
+      if (trailingZeros >= 18) return 18;
+      if (trailingZeros >= 6) return trailingZeros;
     }
 
-    // Check if the raw value is way too large for the reported decimals
-    // e.g., if decimals=9 but value has 18+ digits, likely using 18 decimals
-    const raw = BigInt(rawValue);
-    const reportedDivisor = BigInt(10) ** BigInt(reportedDecimals);
-    const result = raw / reportedDivisor;
-
-    // If result would be > 1 trillion tokens, likely wrong decimals
-    if (result > BigInt(1_000_000_000_000)) {
-      // Try with 18 decimals
-      const standardDivisor = BigInt(10) ** BigInt(18);
-      const standardResult = raw / standardDivisor;
-
-      if (standardResult < BigInt(1_000_000_000)) {
-        // More reasonable with 18 decimals
-        return 18;
-      }
-    }
+    // ⚠️ CRITICAL FIX: 
+    // We REMOVED the logic that checked "if (result > BigInt(1_000_000_000_000))".
+    // We now trust the RPC provider's reported decimals.
 
     return reportedDecimals;
   } catch (e) {
@@ -101,8 +88,32 @@ export class TokenActivityAggregator {
 
     console.log(`Analyzing ${purchases.length} token purchases and ${sales.length} sales...`);
 
-    // OPTIMIZATION: Pre-fetch all prices before processing
-    await this.prefetchTokenPrices([...purchases, ...sales]);
+    // 🚀 OPTIMIZATION START: Filter top tokens only
+    // Count occurrences of each token
+    const tokenCounts = new Map<string, number>();
+    [...purchases, ...sales].forEach(tx => {
+      if (tx.contractAddress) {
+        tokenCounts.set(tx.contractAddress, (tokenCounts.get(tx.contractAddress) || 0) + 1);
+      }
+    });
+
+    // Sort by frequency and take Top 30
+    const topTokens = Array.from(tokenCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 30)
+      .map(entry => entry[0]);
+
+    const topTokenSet = new Set(topTokens);
+    console.log(`🚀 Optimization: Only pricing top ${topTokens.length} active tokens (ignoring ${tokenCounts.size - topTokens.length} dust tokens).`);
+
+    // Filter transactions to only include top tokens for pricing
+    const relevantTransactions = [...purchases, ...sales].filter(tx =>
+      tx.contractAddress && topTokenSet.has(tx.contractAddress)
+    );
+
+    // Pre-fetch prices ONLY for top tokens
+    await this.prefetchTokenPrices(relevantTransactions);
+    // 🚀 OPTIMIZATION END
 
     const tokensBought = await this.aggregateTokenPurchases(purchases, now);
     const tokensSold = await this.aggregateTokenSales(sales);

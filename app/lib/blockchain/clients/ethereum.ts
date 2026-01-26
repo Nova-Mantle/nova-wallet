@@ -1,4 +1,5 @@
-// src/clients/ethereum.ts - OPTIMIZED VERSION
+// app/lib/blockchain/clients/ethereum.ts
+// OPTIMIZED VERSION: Batch price fetching, better caching, faster analysis
 
 import {
     BlockchainClient,
@@ -60,7 +61,7 @@ export class EthereumClient implements BlockchainClient {
     readonly chainName = 'Ethereum';
     readonly nativeToken = 'ETH';
     readonly apiUrl = 'https://api.etherscan.io/v2/api';
-    readonly blockTimeSeconds = 12; // Ethereum has 12-second block time
+    readonly blockTimeSeconds = 12;
 
     private readonly moralisMetadataUrl = 'https://deep-index.moralis.io/api/v2.2/erc20/metadata';
     private readonly moralisPriceUrl = 'https://deep-index.moralis.io/api/v2.2/erc20';
@@ -100,15 +101,19 @@ export class EthereumClient implements BlockchainClient {
         this.validateAddress(address);
         const lowerAddress = address.toLowerCase();
 
-        console.log(`Fetching ETH transactions for ${lowerAddress}...`);
-        console.log(`⚠️  Note: Large addresses may take several minutes to process`);
+        console.log(`[Ethereum] 🔍 Fetching transactions...`);
+        console.log(`[Ethereum] ⚠️  Note: Large addresses may take several minutes`);
 
-        const ethTxs = await this.fetchAllPages('txlist', lowerAddress, options);
-        console.log(`Found ${ethTxs.length} ETH transactions.`);
+        // ✅ OPTIMIZATION: Fetch both in parallel
+        const [ethTxsResult, erc20TxsResult] = await Promise.allSettled([
+            this.fetchAllPages('txlist', lowerAddress, options),
+            this.fetchAllPages('tokentx', lowerAddress, options)
+        ]);
 
-        console.log(`Fetching ERC-20 transactions for ${lowerAddress}...`);
-        const erc20Txs = await this.fetchAllPages('tokentx', lowerAddress, options);
-        console.log(`Found ${erc20Txs.length} ERC-20 transactions.`);
+        const ethTxs = ethTxsResult.status === 'fulfilled' ? ethTxsResult.value : [];
+        const erc20Txs = erc20TxsResult.status === 'fulfilled' ? erc20TxsResult.value : [];
+
+        console.log(`[Ethereum] Found ${ethTxs.length} ETH | ${erc20Txs.length} ERC-20 transactions.`);
 
         const ethTxMap = new Map<string, Transaction>();
         for (const tx of ethTxs) {
@@ -146,7 +151,7 @@ export class EthereumClient implements BlockchainClient {
 
         if (allTxs.length > this.config.maxTransactionsPerAddress) {
             console.warn(
-                `⚠️ Limiting to ${this.config.maxTransactionsPerAddress} transactions (found ${allTxs.length}).`
+                `[Ethereum] ⚠️ Limiting to ${this.config.maxTransactionsPerAddress} transactions (found ${allTxs.length}).`
             );
             return allTxs.slice(0, this.config.maxTransactionsPerAddress);
         }
@@ -159,34 +164,29 @@ export class EthereumClient implements BlockchainClient {
             const url = `${this.apiUrl}?chainid=1&module=proxy&action=eth_blockNumber&apikey=${this.config.etherscanApiKey}`;
             const response = await httpClient.get<EtherscanResponse<string>>(url);
 
-            // For /v2/api endpoint, response.result might be directly available
             if (response.result) {
                 const blockNum = parseInt(response.result, 16);
 
-                // Sanity check
                 if (blockNum > 15000000 && blockNum < 30000000) {
-                    console.log(`   -> ✅ Current block from API: ${blockNum}`);
+                    console.log(`[Ethereum]    -> Current block: ${blockNum}`);
                     return blockNum;
                 }
             }
-
-            console.warn(`   -> ⚠️ Unexpected response format:`, response);
         } catch (error) {
-            console.warn(`   -> ❌ API call failed:`, error);
+            console.warn(`[Ethereum]    -> Block number API failed, using estimate`);
         }
 
-        // Fallback: Use a known recent block and extrapolate
-        // Reference: Block 21,000,000 was approximately at timestamp 1730000000 (Oct 27, 2024)
+        // Fallback calculation
         const REFERENCE_BLOCK = 21000000;
         const REFERENCE_TIMESTAMP = 1730000000;
-        const AVERAGE_BLOCK_TIME = 12.05; // More accurate average
+        const AVERAGE_BLOCK_TIME = 12.05;
 
         const now = Math.floor(Date.now() / 1000);
         const secondsSinceReference = now - REFERENCE_TIMESTAMP;
         const blocksSinceReference = Math.floor(secondsSinceReference / AVERAGE_BLOCK_TIME);
         const estimatedBlock = REFERENCE_BLOCK + blocksSinceReference;
 
-        console.log(`   -> Using estimated current block: ${estimatedBlock} (fallback calculation)`);
+        console.log(`[Ethereum]    -> Estimated block: ${estimatedBlock}`);
         return estimatedBlock;
     }
 
@@ -201,21 +201,19 @@ export class EthereumClient implements BlockchainClient {
         if (options?.timeframe?.start && !options.startBlock) {
             const now = Math.floor(Date.now() / 1000);
             const blocksSinceStart = Math.floor((now - options.timeframe.start) / this.blockTimeSeconds);
-            const currentBlock = await this.getCurrentBlockNumber(); // ✅ FETCH DYNAMICALLY
+            const currentBlock = await this.getCurrentBlockNumber();
             startBlock = Math.max(0, currentBlock - blocksSinceStart);
-            console.log(`   -> Estimated start block for timeframe: ${startBlock} (current: ${currentBlock})`);
+            console.log(`[Ethereum]    -> Start block: ${startBlock} (for timeframe)`);
         }
 
         const endBlock = options?.endBlock ?? 99999999;
 
         while (true) {
-            console.log(`   Fetching ${action} page from block ${startBlock}...`);
+            console.log(`[Ethereum]    Fetching ${action} page from block ${startBlock}...`);
 
             const pageResults = await this.fetchPage(action, address, startBlock, endBlock);
 
-            if (pageResults.length === 0) {
-                break;
-            }
+            if (pageResults.length === 0) break;
 
             const pageLen = pageResults.length;
             allResults.push(...pageResults);
@@ -231,9 +229,7 @@ export class EthereumClient implements BlockchainClient {
             const lastBlock = parseInt(lastTx.blockNumber) || 0;
             startBlock = lastBlock + 1;
 
-            if (startBlock > endBlock) {
-                break;
-            }
+            if (startBlock > endBlock) break;
         }
 
         if (options?.timeframe) {
@@ -268,9 +264,7 @@ export class EthereumClient implements BlockchainClient {
                 );
             }
         } catch (error) {
-            if (error instanceof APIError) {
-                throw error;
-            }
+            if (error instanceof APIError) throw error;
             throw new APIError(
                 this.chainName,
                 error instanceof Error ? error.message : 'Unknown error fetching transactions'
@@ -282,9 +276,7 @@ export class EthereumClient implements BlockchainClient {
         const lowerAddress = tokenAddress.toLowerCase();
 
         const cached = tokenInfoCache.get<TokenInfo>(`token_info_${lowerAddress}`);
-        if (cached) {
-            return cached;
-        }
+        if (cached) return cached;
 
         const known = this.KNOWN_TOKENS.get(lowerAddress);
         if (known) {
@@ -292,9 +284,8 @@ export class EthereumClient implements BlockchainClient {
             return known;
         }
 
-        if (this.config.moralisApiKey) {
-            console.log(`   -> Discovering token info for ${lowerAddress}...`);
-
+        // ✅ OPTIMIZED: Skip Moralis if rate limited (check failedTokenCache)
+        if (this.config.moralisApiKey && !failedTokenCache.has('moralis_metadata_rate_limit')) {
             try {
                 const url = `${this.moralisMetadataUrl}?chain=eth&addresses=${lowerAddress}`;
                 const response = await httpClient.get<MoralisTokenMetadata[]>(url, {
@@ -309,8 +300,6 @@ export class EthereumClient implements BlockchainClient {
                     const decimals = parseInt(metadata.decimals) || 18;
                     const symbol = metadata.symbol.toUpperCase();
 
-                    console.log(`   -> ✅ Discovered Symbol: ${symbol}, Decimals: ${decimals}`);
-
                     const tokenInfo: TokenInfo = {
                         symbol,
                         decimals,
@@ -321,8 +310,11 @@ export class EthereumClient implements BlockchainClient {
                     tokenInfoCache.set(`token_info_${lowerAddress}`, tokenInfo, CACHE_TTL.TOKEN_INFO);
                     return tokenInfo;
                 }
-            } catch (error) {
-                console.warn(`   -> ⚠️  Moralis metadata failed (using fallback): ${error instanceof Error ? error.message : error}`);
+            } catch (error: any) {
+                if (error.response?.status === 401) {
+                    console.log('[Ethereum] ⚠️ Moralis rate limit - using fallback for all future requests');
+                    failedTokenCache.set('moralis_metadata_rate_limit', true, 3600000); // 1 hour
+                }
             }
         }
 
@@ -340,7 +332,6 @@ export class EthereumClient implements BlockchainClient {
         const tokenInfo = await this.getTokenMetadata(tokenAddress);
         const tokenSymbol = tokenInfo.symbol;
 
-        // Check if token previously failed
         const failKey = `failed_${tokenAddress}`;
         if (failedTokenCache.has(failKey)) {
             return { priceUSD: 0, priceNative: 0, timestamp };
@@ -348,11 +339,7 @@ export class EthereumClient implements BlockchainClient {
 
         if (tokenSymbol === 'WETH') {
             const ethUSD = await this.getNativeTokenPrice(timestamp);
-            return {
-                priceUSD: ethUSD,
-                priceNative: 1.0,
-                timestamp
-            };
+            return { priceUSD: ethUSD, priceNative: 1.0, timestamp };
         }
 
         const date = new Date(timestamp * 1000);
@@ -361,7 +348,7 @@ export class EthereumClient implements BlockchainClient {
 
         const cachedPrice = priceCache.get<number>(cacheKey);
         if (cachedPrice !== null && cachedPrice !== undefined) {
-            return { priceUSD: cachedPrice, priceNative: 0, timestamp };  // Reconstruct TokenPrice
+            return { priceUSD: cachedPrice, priceNative: 0, timestamp };
         }
 
         if (['USDT', 'USDC', 'DAI'].includes(tokenSymbol)) {
@@ -374,35 +361,73 @@ export class EthereumClient implements BlockchainClient {
                 timestamp
             };
 
-            priceCache.set(cacheKey, 1.0, CACHE_TTL.PRICE_MONTHLY);  // ✅ Store number only
+            priceCache.set(cacheKey, 1.0, CACHE_TTL.PRICE_MONTHLY);
             return price;
         }
 
-        console.log(`   -> API FETCH: Price for ${tokenSymbol} (${tokenAddress})`);
+        // ✅ OPTIMIZED: Faster price fetching
         const priceETH = await this.fetchTokenPriceFromAPIs(tokenSymbol, tokenAddress, timestamp);
 
         if (priceETH > 0) {
             const ethUSD = await this.getNativeTokenPrice(timestamp);
             const priceUSD = priceETH * ethUSD;
 
-            const price: TokenPrice = {
-                priceUSD,
-                priceNative: priceETH,
-                timestamp
-            };
-
-            priceCache.set(cacheKey, priceUSD, CACHE_TTL.PRICE_MONTHLY);  // ✅ Store number only
+            const price: TokenPrice = { priceUSD, priceNative: priceETH, timestamp };
+            priceCache.set(cacheKey, priceUSD, CACHE_TTL.PRICE_MONTHLY);
             return price;
         }
 
-        // Mark as failed to avoid retrying
         failedTokenCache.set(failKey, true, CACHE_TTL.FAILED_TOKEN);
+        return { priceUSD: 0, priceNative: 0, timestamp };
+    }
 
-        return {
-            priceUSD: 0,
-            priceNative: 0,
-            timestamp
-        };
+    /**
+ * Get CURRENT token price (more reliable for portfolio)
+ */
+    async getCurrentTokenPrice(tokenAddress: string): Promise<number> {
+        const lowerAddress = tokenAddress.toLowerCase();
+
+        console.log(`   🔍 getCurrentTokenPrice called for: ${lowerAddress.substring(0, 10)}...`);
+
+        // Check cache (5 min)
+        const cacheKey = `current_price_${lowerAddress}`;
+        const cached = priceCache.get<number>(cacheKey);
+        if (cached !== null && cached !== undefined) {
+            console.log(`   📦 Using cached price: $${cached.toFixed(2)}`);
+            return cached;
+        }
+
+        // ✅ REMOVED: Don't check failed cache for current prices
+        // Let's always try to fetch current prices since they change frequently
+        // if (failedTokenCache.has(`failed_${lowerAddress}`)) {
+        //     console.log(`   ⚠️ Token in failed cache, returning 0`);
+        //     return 0;
+        // }
+
+        try {
+            // DeFiLlama current price
+            const llamaAddress = `ethereum:${lowerAddress}`;
+            const url = `https://coins.llama.fi/prices/current/${llamaAddress}`;
+
+            console.log(`   📡 Fetching from DeFiLlama...`);
+            const response = await httpClient.get<DefiLlamaResponse>(url);
+
+            if (response?.coins?.[llamaAddress]?.price) {
+                const priceUSD = response.coins[llamaAddress].price;
+                console.log(`   💰 Current price: $${priceUSD.toFixed(2)}`);
+                priceCache.set(cacheKey, priceUSD, 300000); // 5 min
+                return priceUSD;
+            } else {
+                console.log(`   ❌ No price in DeFiLlama response`);
+            }
+        } catch (error) {
+            console.error(`   🚨 Price fetch error:`, error);
+        }
+
+        // ✅ CHANGED: Don't mark as permanently failed for current prices
+        // Just return 0 this time, but allow retry next time
+        console.log(`   ⚠️ Price not found, returning 0 (will retry next time)`);
+        return 0;
     }
 
     async getNativeTokenPrice(timestamp: number): Promise<number> {
@@ -410,11 +435,7 @@ export class EthereumClient implements BlockchainClient {
         const monthlyKey = `ETH_USD_${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
 
         const cached = priceCache.get<number>(monthlyKey);
-        if (cached !== null && cached !== undefined) {
-            return cached;
-        }
-
-        console.log(`-> Fetching ETH/USD price for ${monthlyKey} from API...`);
+        if (cached !== null && cached !== undefined) return cached;
 
         const monthlyDate = new Date(date.getFullYear(), date.getMonth(), 1);
         const monthlyTs = Math.floor(monthlyDate.getTime() / 1000);
@@ -430,11 +451,9 @@ export class EthereumClient implements BlockchainClient {
                 return price;
             }
         } catch (error) {
-            console.warn(`   -> Failed to fetch ETH/USD from CryptoCompare: ${error}`);
+            // Silent fail
         }
 
-        // Cache the failure (0) to avoid repeated API calls
-        console.warn(`   -> Warning: Could not fetch ETH/USD price, returning 0`);
         priceCache.set(monthlyKey, 0, CACHE_TTL.PRICE_MONTHLY);
         return 0;
     }
@@ -444,50 +463,31 @@ export class EthereumClient implements BlockchainClient {
         tokenAddress: string,
         timestamp: number
     ): Promise<number> {
+        // ✅ Try DeFiLlama first (fastest, no rate limits)
+        try {
+            const price = await this.fetchFromDeFiLlama(tokenAddress, timestamp);
+            if (price > 0) return price;
+        } catch (error) {
+            // Silent fail
+        }
+
+        // Try CryptoCompare if symbol is known
         if (tokenSymbol !== 'UNKNOWN') {
-            console.log('      -> [Layer 1] Trying CryptoCompare...');
-
-            const date = new Date(timestamp * 1000);
-            const monthlyDate = new Date(date.getFullYear(), date.getMonth(), 1);
-            const monthlyTs = Math.floor(monthlyDate.getTime() / 1000);
-
             try {
+                const date = new Date(timestamp * 1000);
+                const monthlyDate = new Date(date.getFullYear(), date.getMonth(), 1);
+                const monthlyTs = Math.floor(monthlyDate.getTime() / 1000);
+
                 const url = `${this.cryptocompareUrl}?fsym=${tokenSymbol}&tsyms=ETH&ts=${monthlyTs}&api_key=${this.config.cryptocompareApiKey}`;
                 const response = await httpClient.get<CryptoCompareResponse>(url);
 
                 const price = response?.[tokenSymbol]?.ETH || 0;
-                if (price > 0) {
-                    console.log(`      -> ✅ CryptoCompare SUCCESS: ${price} ETH`);
-                    return price;
-                }
+                if (price > 0) return price;
             } catch (error) {
-                console.warn(`      -> CryptoCompare failed: ${error}`);
+                // Silent fail
             }
         }
 
-        console.log('      -> [Layer 2] Trying DeFiLlama...');
-        try {
-            const price = await this.fetchFromDeFiLlama(tokenAddress, timestamp);
-            if (price > 0) {
-                console.log(`      -> ✅ DeFiLlama SUCCESS: ${price} ETH`);
-                return price;
-            }
-        } catch (error) {
-            console.warn(`      -> DeFiLlama failed: ${error}`);
-        }
-
-        console.log('      -> [Layer 3] Trying Moralis...');
-        try {
-            const price = await this.fetchFromMoralis(tokenAddress, timestamp);
-            if (price > 0) {
-                console.log(`      -> ✅ Moralis PRICE SUCCESS: ${price} ETH`);
-                return price;
-            }
-        } catch (error) {
-            console.warn(`      -> Moralis failed: ${error}`);
-        }
-
-        console.log(`      -> ❌ ALL APIs FAILED for ${tokenSymbol}. Ignoring value.`);
         return 0;
     }
 
@@ -508,37 +508,41 @@ export class EthereumClient implements BlockchainClient {
                 }
             }
         } catch (error) {
-            // Expected to fail for many tokens
+            // Silent fail
         }
 
         return 0;
     }
 
-    private async fetchFromMoralis(tokenAddress: string, timestamp: number): Promise<number> {
-        const date = new Date(timestamp * 1000);
-        const toDate = date.toISOString();
-        const url = `${this.moralisPriceUrl}/${tokenAddress}/price?chain=eth&to_date=${toDate}`;
+    // ✅ NEW: Batch fetch token prices (MAJOR OPTIMIZATION)
+    async batchGetTokenPrices(tokenAddresses: string[]): Promise<Map<string, number>> {
+        const priceMap = new Map<string, number>();
+
+        if (tokenAddresses.length === 0) return priceMap;
+
+        console.log(`[Ethereum] 📦 Batch fetching ${tokenAddresses.length} token prices...`);
 
         try {
-            const response = await httpClient.get<MoralisPrice>(url, {
-                headers: {
-                    'accept': 'application/json',
-                    'X-API-Key': this.config.moralisApiKey
-                }
-            });
+            // DeFiLlama supports batch queries
+            const addresses = tokenAddresses
+                .map(addr => `ethereum:${addr.toLowerCase()}`)
+                .join(',');
 
-            if (response?.usdPrice) {
-                const tokenUSD = response.usdPrice;
-                const ethUSD = await this.getNativeTokenPrice(timestamp);
+            const url = `https://coins.llama.fi/prices/current/${addresses}`;
+            const response = await httpClient.get<DefiLlamaResponse>(url);
 
-                if (ethUSD > 0) {
-                    return tokenUSD / ethUSD;
+            if (response.coins) {
+                for (const [key, data] of Object.entries(response.coins)) {
+                    const address = key.replace('ethereum:', '').toLowerCase();
+                    priceMap.set(address, data.price || 0);
                 }
             }
+
+            console.log(`[Ethereum] ✅ Fetched ${priceMap.size} prices in one request!`);
         } catch (error) {
-            // Expected to fail for many tokens
+            console.error('[Ethereum] Batch price fetch failed:', error);
         }
 
-        return 0;
+        return priceMap;
     }
 }

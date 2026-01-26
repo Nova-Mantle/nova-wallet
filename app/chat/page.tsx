@@ -46,6 +46,9 @@ export default function ChatPage() {
     );
 }
 
+// Import the custom actions hook
+import { useNovaActions } from "./actions/useNovaActions";
+
 function ChatPageContent() {
     const { isConnected, address } = useAccount();
     const chainId = useChainId();
@@ -59,9 +62,161 @@ function ChatPageContent() {
     const [hasStartedChat, setHasStartedChat] = useState(false);
     const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
+    // Register all Nova AI actions
+    useNovaActions();
+
+    // State for Payment Link Action
+    const paymentLinkDataRef = useRef<any>(null);
+    const [, forceUpdate] = useState(0);
+
+    // ============================================
+    // NEW ACTION: Create Payment Link (Chat-Based)
+    // ============================================
+    useCopilotAction({
+        name: "createPaymentLink",
+        description: "Buat payment link. PENTING: Jika parameter amount/token belum ada, JANGAN TANYA di chat. Langsung panggil tool ini agar form input muncul.",
+        parameters: [
+            { name: "amount", type: "number", description: "Jumlah crypto (e.g. 0.1)", required: false },
+            { name: "token", type: "string", description: "Symbol token (ETH, USDC, MNT, dll)", required: false },
+            { name: "network", type: "string", description: "Network blockchain (ethereum, mantle, dll)", required: false },
+            { name: "receiverWallet", type: "string", description: "Wallet penerima (default: wallet user yg connect)", required: false },
+        ],
+        handler: async ({ amount, token, network, receiverWallet }) => {
+            console.log("🔥 createPaymentLink action called!", { amount, token });
+
+            if (!amount || !token) {
+                return "Mohon lengkapi data pembayaran di form berikut.";
+            }
+
+            try {
+                const finalReceiver = receiverWallet || address;
+                if (!finalReceiver) return "Wallet not connected";
+
+                const response = await axios.post('/api/payments/create', {
+                    cryptoAmount: amount,
+                    cryptoCurrency: token || 'ETH',
+                    network: network || 'ethereum',
+                    receiverWallet: finalReceiver
+                });
+
+                if (response.data.success) {
+                    paymentLinkDataRef.current = response.data.data;
+                    forceUpdate(n => n + 1);
+                    return `Payment link berhasil dibuat! ID: ${response.data.data.id}`;
+                }
+                return "Gagal membuat payment link.";
+            } catch (error: any) {
+                console.error("Create payment error:", error);
+                return `Error: ${error.message}`;
+            }
+        },
+        render: ({ status, args }) => {
+            // Case 1: Show Form (If incomplete args/starting)
+            if (status === "executing" && (!args.amount || !args.token)) {
+                return (
+                    <div className="mt-2">
+                        <CreatePaymentForm
+                            defaultValues={{
+                                amount: args.amount,
+                                symbol: args.token,
+                                network: args.network
+                            }}
+                            onSubmit={async (formData: any) => {
+                                const msg = `Buatkan payment link: ${formData.amount} ${formData.token} di network ${formData.network} untuk wallet ${formData.receiverWallet}`;
+                                await appendMessage(
+                                    new TextMessage({
+                                        role: MessageRole.User,
+                                        content: msg,
+                                    })
+                                );
+                            }}
+                        />
+                    </div>
+                );
+            }
+
+            // Case 2: Executing with data
+            if (status === "executing") {
+                return (
+                    <div className="flex items-center gap-2 p-4 bg-gray-900 rounded-xl border border-gray-800 max-w-sm mt-3 animate-pulse">
+                        <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                            <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                        </div>
+                        <span className="text-sm text-gray-300">Generating Payment Link...</span>
+                    </div>
+                );
+            }
+
+            // Case 3: Complete -> Show Result Card
+            if (status === "complete" && paymentLinkDataRef.current) {
+                return (
+                    <div className="mt-2">
+                        <PaymentStatusCard
+                            paymentId={paymentLinkDataRef.current.id}
+                            initialData={paymentLinkDataRef.current}
+                        />
+                    </div>
+                );
+            }
+
+            return <></>;
+        },
+    });
+
+    const SYSTEM_INSTRUCTIONS = `You are Nova AI, a friendly crypto wallet assistant. Always use Bahasa Indonesia.
+
+🚨 CRITICAL RULES:
+
+1. ADDRESS VALIDATION:
+   - WITH 0x: "0xd8dA..." ✅ Use directly
+   - WITHOUT 0x: "d8dA..." ✅ Auto-add 0x and inform user
+   - ENS (vitalik.eth) ❌ Reject: "ENS not supported, use 0x... address"
+   - Invalid (0x123) ❌ Reject: "Address must be 42 characters"
+
+2. WHEN USER SAYS "ANALYZE <ADDRESS>":
+   → Call ONLY: analyzeWalletComprehensive
+   → This runs ALL analysis (portfolio, whale, counterparty, stats) in ONE call
+   → DO NOT call individual actions
+
+3. CHAIN SELECTION:
+   - No chain specified + external address → Use Ethereum Mainnet (chainId: 1)
+   - No chain specified + own wallet → Use all chains
+   - "on Ethereum" → Use chainId: 1
+   - "on Lisk Sepolia" → Use chainId: 4202
+   - "on Mantle Sepolia" → Use chainId: 5003
+
+4. AVAILABLE ACTIONS:
+
+   Basic Actions:
+   - checkBalance: Check balance on ONE chain
+   - checkAllBalances: Check balance on ALL chains
+   - prepareTransaction: Send crypto
+   - showReceiveAddress: Show QR code
+   - displayInfoCard: Tips/education (NEVER for balance!)
+
+   Analysis Actions:
+   - analyzeWalletComprehensive: FULL analysis (use for "analyze <address>")
+   - analyzeWhaleActivityAllChains: Large transactions across all chains
+   - analyzeCounterpartyAllChains: Interactions across all chains
+   
+   Single-Chain Actions (only if user specifies chain):
+   - analyzePortfolio: Portfolio on specific chain
+   - analyzeWhaleActivity: Whale txs on specific chain
+   - analyzeCounterparty: Interactions on specific chain
+
+5. IMPORTANT:
+   - NEVER fabricate balance data
+   - NEVER use displayInfoCard for balances
+   - Always call appropriate actions to get real data
+
+Connected Wallet: ${address || 'Not connected'}
+Current Chain: ${chainId || 'Unknown'}
+
+Keep responses helpful and concise!`;
+
     // useCopilotChat for programmatic message sending
     const { appendMessage } = useCopilotChat({
-        makeSystemMessage: (context) => NOVA_SYSTEM_PROMPT
+        makeSystemMessage: (context) => SYSTEM_INSTRUCTIONS
     });
 
     // State to store balance data for Generative UI
@@ -142,8 +297,7 @@ function ChatPageContent() {
         symbol: string;
     }[] | null>(null);
 
-    // State to trigger re-render after data is set
-    const [, forceUpdate] = useState(0);
+
 
     // State for slippage prediction
     const slippageDataRef = useRef<{
@@ -158,8 +312,7 @@ function ChatPageContent() {
     const portfolioDataRef = useRef<any>(null);
     const tokenActivityDataRef = useRef<any>(null);
     const transactionStatsDataRef = useRef<any>(null);
-    const paymentLinkDataRef = useRef<any>(null);
-    const searchDataRef = useRef<any>(null);
+
 
     // ============================================
     // EXISTING ACTION: Check All Balances
