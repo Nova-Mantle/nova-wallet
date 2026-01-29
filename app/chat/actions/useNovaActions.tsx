@@ -1303,19 +1303,36 @@ This action is OPTIMIZED and calls the backend only ONCE.`,
 
                 // Store data for Generative UI card
                 const chain = json.chain || json.data?.chain || 'Unknown Chain';
-                comprehensiveDataRef.current = {
-                    address: addressToUse,
-                    chain,
-                    portfolio,
-                    whale,
-                    counterparty,
-                    stats,
-                    tokenActivity
-                };
-                forceUpdate(n => n + 1);
 
-                // Return simple confirmation (card will render via render function)
-                return `Analysis complete for ${addressToUse.substring(0, 10)}...`;
+                let msg = `✅ **Laporan Analisis Lengkap** untuk ${addressToUse.substring(0, 6)}...\n`;
+                msg += `Chain: ${chain}\n\n`;
+
+                const nativeBalance = portfolio.nativeBalance || 0;
+                const nativeSymbol = json.data?.metadata?.nativeToken || 'ETH';
+
+                if (nativeBalance > 0 && numTokens === 0) {
+                    msg += `💰 **Portfolio:** $${portfolioValue.toLocaleString()} (${nativeBalance.toFixed(2)} ${nativeSymbol})\n`;
+                } else if (nativeBalance > 0) {
+                    msg += `💰 **Portfolio:** $${portfolioValue.toLocaleString()} (${nativeBalance.toFixed(2)} ${nativeSymbol} + ${numTokens} tokens)\n`;
+                } else {
+                    msg += `💰 **Portfolio:** $${portfolioValue.toLocaleString()} (${numTokens} tokens)\n`;
+                }
+                if (numWhaleTxs > 0) {
+                    msg += `🐋 **Whale Activity:** TERDETEKSI. ${numWhaleTxs} transaksi besar (Total: $${whaleValue.toLocaleString()}).\n`;
+                } else {
+                    msg += `🐋 **Whale Activity:** Tidak ada transaksi >$50k dalam ${timeframe} hari terakhir.\n`;
+                }
+
+                msg += `🤝 **Interaksi:** ${numCounterparties} alamat unik.\n`;
+                if (gasSpent > 0) {
+                    msg += `⛽ **Gas Spent:** $${gasSpent.toFixed(2)} (${totalTxs} txs sent).\n`;
+                } else {
+                    msg += `⛽ **Gas:** $0 (all ${totalTxs} txs were incoming).\n`;
+                }
+                msg += `📈 **Trading P&L:** ${pnl > 0 ? '+' : ''}${pnl.toFixed(2)}%\n\n`;
+                msg += `ℹ️ *Analisis berdasarkan ${timeframe} hari terakhir.*`;
+
+                return msg;
 
             } catch (error: any) {
                 console.error('❌ Comprehensive analysis failed:', error);

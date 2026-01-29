@@ -458,6 +458,35 @@ export class EthereumClient implements BlockchainClient {
         return 0;
     }
 
+    /**
+ * Get CURRENT ETH price (not monthly average)
+ */
+    async getCurrentNativeTokenPrice(): Promise<number> {
+        const cacheKey = 'ETH_USD_CURRENT';
+        const cached = priceCache.get<number>(cacheKey);
+
+        if (cached !== null && cached !== undefined) {
+            return cached;
+        }
+
+        try {
+            // Use CoinGecko for current price
+            const url = `https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd`;
+            const response = await httpClient.get<{ ethereum: { usd: number } }>(url);
+            const price = response?.ethereum?.usd || 0;
+
+            if (price > 0) {
+                priceCache.set(cacheKey, price, 300); // Cache for 5 minutes
+                return price;
+            }
+        } catch (error) {
+            console.error('Failed to fetch current ETH price:', error);
+        }
+
+        // Fallback to monthly price
+        return this.getNativeTokenPrice(Math.floor(Date.now() / 1000));
+    }
+
     private async fetchTokenPriceFromAPIs(
         tokenSymbol: string,
         tokenAddress: string,

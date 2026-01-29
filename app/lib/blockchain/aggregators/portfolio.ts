@@ -128,7 +128,10 @@ export class PortfolioAggregator {
 
     // Calculate ETH balance
     const nativeBalance = this.calculateNativeBalance(transactions, lowerAddress);
-    const ethPrice = await this.client.getNativeTokenPrice(now);
+    // Use current price for portfolio valuation
+    const ethPrice = this.client.getCurrentNativeTokenPrice 
+        ? await this.client.getCurrentNativeTokenPrice()
+        : await this.client.getNativeTokenPrice(now);
     const nativeValueUSD = nativeBalance * ethPrice;
 
     // Calculate token holdings
