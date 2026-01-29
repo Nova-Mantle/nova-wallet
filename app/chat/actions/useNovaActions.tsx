@@ -1304,6 +1304,18 @@ This action is OPTIMIZED and calls the backend only ONCE.`,
                 // Store data for Generative UI card
                 const chain = json.chain || json.data?.chain || 'Unknown Chain';
 
+                comprehensiveDataRef.current = {
+                    address: addressToUse,
+                    chain,
+                    portfolio,
+                    whale,
+                    counterparty,
+                    stats,
+                    tokenActivity
+                };
+                forceUpdate(n => n + 1);
+
+                // Build text summary message
                 let msg = `✅ **Laporan Analisis Lengkap** untuk ${addressToUse.substring(0, 6)}...\n`;
                 msg += `Chain: ${chain}\n\n`;
 
