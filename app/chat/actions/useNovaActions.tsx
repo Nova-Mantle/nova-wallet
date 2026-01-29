@@ -13,6 +13,7 @@ import { BalanceCard } from "@/components/chat/BalanceCard";
 import { MultiChainBalanceCard } from "@/components/chat/MultiChainBalanceCard";
 import { InfoCard } from "@/components/chat/InfoCard";
 import { SlippageCard } from "@/components/chat/SlippageCard";
+import { ComprehensiveAnalysisCard } from "@/components/chat/onchain";
 
 /**
  * Validates Ethereum address format
@@ -85,6 +86,9 @@ export function useNovaActions() {
         amount: number;
         side: "buy" | "sell";
     } | null>(null);
+
+    // Ref for comprehensive wallet analysis (Generative UI)
+    const comprehensiveDataRef = useRef<any>(null);
 
     // State to trigger re-render after data is set in refs
     const [, forceUpdate] = useState(0);
@@ -1297,26 +1301,21 @@ This action is OPTIMIZED and calls the backend only ONCE.`,
                     totalTxs
                 });
 
-                // Build response
+                // Store data for Generative UI card
                 const chain = json.chain || json.data?.chain || 'Unknown Chain';
+                comprehensiveDataRef.current = {
+                    address: addressToUse,
+                    chain,
+                    portfolio,
+                    whale,
+                    counterparty,
+                    stats,
+                    tokenActivity
+                };
+                forceUpdate(n => n + 1);
 
-                let msg = `✅ **Laporan Analisis Lengkap** untuk ${addressToUse.substring(0, 6)}...\n`;
-                msg += `Chain: ${chain}\n\n`;
-
-                msg += `💰 **Portfolio:** $${portfolioValue.toLocaleString()} (${numTokens} tokens)\n`;
-
-                if (numWhaleTxs > 0) {
-                    msg += `🐋 **Whale Activity:** TERDETEKSI. ${numWhaleTxs} transaksi besar (Total: $${whaleValue.toLocaleString()}).\n`;
-                } else {
-                    msg += `🐋 **Whale Activity:** Tidak ada transaksi >$50k dalam ${timeframe} hari terakhir.\n`;
-                }
-
-                msg += `🤝 **Interaksi:** ${numCounterparties} alamat unik.\n`;
-                msg += `⛽ **Gas:** $${gasSpent.toFixed(2)} (${totalTxs} transaksi).\n`;
-                msg += `📈 **Trading P&L:** ${pnl > 0 ? '+' : ''}${pnl.toFixed(2)}%\n\n`;
-                msg += `ℹ️ *Analisis berdasarkan ${timeframe} hari terakhir.*`;
-
-                return msg;
+                // Return simple confirmation (card will render via render function)
+                return `Analysis complete for ${addressToUse.substring(0, 10)}...`;
 
             } catch (error: any) {
                 console.error('❌ Comprehensive analysis failed:', error);
@@ -1328,14 +1327,20 @@ This action is OPTIMIZED and calls the backend only ONCE.`,
         render: ({ status }) => {
             if (status === "executing") {
                 return (
-                    <div className="bg-gradient-to-r from-indigo-50 to-blue-50 p-4 rounded-xl border border-blue-100 flex items-center gap-3 animate-pulse">
-                        <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                        <div className="text-sm text-blue-800 font-medium">
-                            Running Deep Scan...
+                    <div className="bg-gradient-to-r from-purple-50 to-violet-50 p-4 rounded-xl border border-purple-200 flex items-center gap-3 animate-pulse max-w-md mt-2">
+                        <div className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                        <div className="text-sm text-purple-800 font-medium">
+                            Running comprehensive analysis...
                         </div>
                     </div>
                 );
             }
+
+            // Show card when complete and data is available
+            if (status === "complete" && comprehensiveDataRef.current) {
+                return <ComprehensiveAnalysisCard data={comprehensiveDataRef.current} />;
+            }
+
             return <></>;
         }
     });

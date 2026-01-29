@@ -36,6 +36,15 @@ import { SendTransactionForm } from "@/components/chat/forms/SendTransactionForm
 import { SlippageForm } from "@/components/chat/forms/SlippageForm";
 import axios from "axios";
 
+// Onchain Search Generative UI Cards
+import {
+    WhaleAnalysisCard,
+    CounterpartyCard,
+    OnchainPortfolioCard,
+    TokenActivityCard as OnchainTokenActivityCard,
+    TransactionStatsCard as OnchainTransactionStatsCard
+} from "@/components/chat/onchain";
+
 export default function ChatPage() {
     return (
         <CopilotKit runtimeUrl="/api/copilotkit">
@@ -1101,6 +1110,193 @@ Keep responses helpful and concise!`;
 
             return <></>;
         },
+    });
+
+    // ============================================
+    // ONCHAIN SEARCH ACTIONS (Generative UI)
+    // ============================================
+
+    // Whale Analysis Action
+    useCopilotAction({
+        name: "analyze_whale_activity",
+        description: "Analyze whale activity for a wallet address. Shows large transactions, exchange flows, and accumulation/distribution patterns.",
+        parameters: [
+            { name: "address", type: "string", description: "Wallet address to analyze (0x...)", required: true },
+            { name: "chainId", type: "number", description: "Chain ID (1=ETH, 5000=Mantle, 4202=Lisk Sepolia). Default: 1", required: false }
+        ],
+        handler: async ({ address: walletAddress, chainId: chain }) => {
+            console.log("🐳 Whale Analysis triggered for:", walletAddress);
+            try {
+                const response = await axios.post('/api/onchain/whale', {
+                    address: walletAddress,
+                    chainId: chain || 1
+                });
+                return response.data;
+            } catch (error: any) {
+                console.error("Whale analysis error:", error);
+                return { error: true, message: error.message };
+            }
+        },
+        render: ({ status, result }) => {
+            if (status === "executing") {
+                return (
+                    <div className="flex items-center gap-2 p-4 bg-purple-50 rounded-xl border border-purple-200 max-w-md mt-3">
+                        <Loader2 className="w-5 h-5 text-purple-600 animate-spin" />
+                        <span className="text-sm text-purple-700">Analyzing whale activity...</span>
+                    </div>
+                );
+            }
+            if (status === "complete" && result && !result.error) {
+                return <WhaleAnalysisCard data={result.data || result} />;
+            }
+            return <></>;
+        }
+    });
+
+    // Counterparty Analysis Action
+    useCopilotAction({
+        name: "analyze_counterparties",
+        description: "Analyze who a wallet interacts with most. Shows top counterparties, known exchanges, and DeFi protocols.",
+        parameters: [
+            { name: "address", type: "string", description: "Wallet address to analyze (0x...)", required: true },
+            { name: "chainId", type: "number", description: "Chain ID. Default: 1", required: false }
+        ],
+        handler: async ({ address: walletAddress, chainId: chain }) => {
+            console.log("🤝 Counterparty Analysis triggered for:", walletAddress);
+            try {
+                const response = await axios.post('/api/onchain/counterparty', {
+                    address: walletAddress,
+                    chainId: chain || 1
+                });
+                return response.data;
+            } catch (error: any) {
+                return { error: true, message: error.message };
+            }
+        },
+        render: ({ status, result }) => {
+            if (status === "executing") {
+                return (
+                    <div className="flex items-center gap-2 p-4 bg-purple-50 rounded-xl border border-purple-200 max-w-md mt-3">
+                        <Loader2 className="w-5 h-5 text-purple-600 animate-spin" />
+                        <span className="text-sm text-purple-700">Analyzing counterparties...</span>
+                    </div>
+                );
+            }
+            if (status === "complete" && result && !result.error) {
+                return <CounterpartyCard data={result.data || result} />;
+            }
+            return <></>;
+        }
+    });
+
+    // Portfolio Analysis Action
+    useCopilotAction({
+        name: "analyze_portfolio",
+        description: "Get portfolio analysis - token holdings, net worth, and PnL for a wallet.",
+        parameters: [
+            { name: "address", type: "string", description: "Wallet address (0x...)", required: true },
+            { name: "chainId", type: "number", description: "Chain ID. Default: 1", required: false }
+        ],
+        handler: async ({ address: walletAddress, chainId: chain }) => {
+            console.log("💰 Portfolio Analysis triggered for:", walletAddress);
+            try {
+                const response = await axios.post('/api/onchain/portfolio', {
+                    address: walletAddress,
+                    chainId: chain || 1
+                });
+                return response.data;
+            } catch (error: any) {
+                return { error: true, message: error.message };
+            }
+        },
+        render: ({ status, result }) => {
+            if (status === "executing") {
+                return (
+                    <div className="flex items-center gap-2 p-4 bg-purple-50 rounded-xl border border-purple-200 max-w-md mt-3">
+                        <Loader2 className="w-5 h-5 text-purple-600 animate-spin" />
+                        <span className="text-sm text-purple-700">Analyzing portfolio...</span>
+                    </div>
+                );
+            }
+            if (status === "complete" && result && !result.error) {
+                return <OnchainPortfolioCard data={result.data || result} />;
+            }
+            return <></>;
+        }
+    });
+
+    // Token Activity Action
+    useCopilotAction({
+        name: "analyze_token_activity",
+        description: "Analyze token trading activity - buys, sells, PnL, best/worst performers.",
+        parameters: [
+            { name: "address", type: "string", description: "Wallet address (0x...)", required: true },
+            { name: "chainId", type: "number", description: "Chain ID. Default: 1", required: false },
+            { name: "timeframeDays", type: "number", description: "Days to analyze. Default: 180", required: false }
+        ],
+        handler: async ({ address: walletAddress, chainId: chain, timeframeDays }) => {
+            console.log("📈 Token Activity triggered for:", walletAddress);
+            try {
+                const response = await axios.post('/api/onchain/token-activity', {
+                    address: walletAddress,
+                    chainId: chain || 1,
+                    timeframeDays
+                });
+                return response.data;
+            } catch (error: any) {
+                return { error: true, message: error.message };
+            }
+        },
+        render: ({ status, result }) => {
+            if (status === "executing") {
+                return (
+                    <div className="flex items-center gap-2 p-4 bg-purple-50 rounded-xl border border-purple-200 max-w-md mt-3">
+                        <Loader2 className="w-5 h-5 text-purple-600 animate-spin" />
+                        <span className="text-sm text-purple-700">Analyzing token activity...</span>
+                    </div>
+                );
+            }
+            if (status === "complete" && result && !result.error) {
+                return <OnchainTokenActivityCard data={result.data || result} />;
+            }
+            return <></>;
+        }
+    });
+
+    // Transaction Stats Action
+    useCopilotAction({
+        name: "analyze_transaction_stats",
+        description: "Get transaction statistics - total txs, gas spent, activity frequency, account age.",
+        parameters: [
+            { name: "address", type: "string", description: "Wallet address (0x...)", required: true },
+            { name: "chainId", type: "number", description: "Chain ID. Default: 1", required: false }
+        ],
+        handler: async ({ address: walletAddress, chainId: chain }) => {
+            console.log("📊 Transaction Stats triggered for:", walletAddress);
+            try {
+                const response = await axios.post('/api/onchain/stats', {
+                    address: walletAddress,
+                    chainId: chain || 1
+                });
+                return response.data;
+            } catch (error: any) {
+                return { error: true, message: error.message };
+            }
+        },
+        render: ({ status, result }) => {
+            if (status === "executing") {
+                return (
+                    <div className="flex items-center gap-2 p-4 bg-purple-50 rounded-xl border border-purple-200 max-w-md mt-3">
+                        <Loader2 className="w-5 h-5 text-purple-600 animate-spin" />
+                        <span className="text-sm text-purple-700">Analyzing transaction stats...</span>
+                    </div>
+                );
+            }
+            if (status === "complete" && result && !result.error) {
+                return <OnchainTransactionStatsCard data={result.data || result} />;
+            }
+            return <></>;
+        }
     });
 
     useEffect(() => {
