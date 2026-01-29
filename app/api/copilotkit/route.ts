@@ -30,12 +30,18 @@ const runtime = new CopilotRuntime({
       description: "Analyze if a wallet is a 'Whale' (large holder). Checks accumulation patterns, dump risk, and large transfers.",
       parameters: [
         strictAddressParam,
-        { name: "chainId", type: "number", description: "The chain ID (e.g., 1 for Eth, 5000 for Mantle)" }
+        { name: "chainId", type: "number", description: "The chain ID (e.g., 1 for Eth, 5000 for Mantle). Default: 1 (Ethereum)", required: false }
       ],
       handler: async ({ address, chainId }: { address: string; chainId?: number }) => {
-        console.log(`🔍 RAW ADDRESS RECEIVED FROM AI: "${address}" (length: ${address.length})`);
-        console.log(`🐳 AI Triggered Whale Search for ${address}`);
-        return await getWhaleActivity(address, chainId || 1);
+        try {
+          console.log(`🔍 RAW ADDRESS RECEIVED FROM AI: "${address}" (length: ${address.length})`);
+          console.log(`🐳 AI Triggered Whale Search for ${address}`);
+          return await getWhaleActivity(address, chainId || 1);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          console.error(`❌ Whale Analysis Error: ${errorMessage}`);
+          return { error: true, message: errorMessage };
+        }
       }
     },
     {
@@ -43,11 +49,17 @@ const runtime = new CopilotRuntime({
       description: "Analyze who a wallet interacts with most. Identifies top senders/receivers and relationship clusters.",
       parameters: [
         strictAddressParam,
-        { name: "chainId", type: "number", description: "The chain ID" }
+        { name: "chainId", type: "number", description: "The chain ID. Default: 1 (Ethereum)", required: false }
       ],
       handler: async ({ address, chainId }: { address: string; chainId?: number }) => {
-        console.log(`🤝 AI Triggered Counterparty Search for ${address}`);
-        return await getCounterpartyAnalysis(address, chainId || 1);
+        try {
+          console.log(`🤝 AI Triggered Counterparty Search for ${address}`);
+          return await getCounterpartyAnalysis(address, chainId || 1);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          console.error(`❌ Counterparty Analysis Error: ${errorMessage}`);
+          return { error: true, message: errorMessage };
+        }
       }
     },
     {
@@ -55,10 +67,16 @@ const runtime = new CopilotRuntime({
       description: "Get the token balances and total net worth of a wallet.",
       parameters: [
         strictAddressParam,
-        { name: "chainId", type: "number" }
+        { name: "chainId", type: "number", description: "The chain ID. Default: 1 (Ethereum)", required: false }
       ],
       handler: async ({ address, chainId }: { address: string; chainId?: number }) => {
-        return await getPortfolioAnalysis(address, chainId || 1);
+        try {
+          return await getPortfolioAnalysis(address, chainId || 1);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          console.error(`❌ Portfolio Analysis Error: ${errorMessage}`);
+          return { error: true, message: errorMessage };
+        }
       }
     },
     {
@@ -66,11 +84,17 @@ const runtime = new CopilotRuntime({
       description: "Analyze trading performance (PnL), buying/selling habits for specific tokens.",
       parameters: [
         strictAddressParam,
-        { name: "chainId", type: "number" },
-        { name: "timeframeDays", type: "number", required: false }
+        { name: "chainId", type: "number", description: "The chain ID. Default: 1 (Ethereum)", required: false },
+        { name: "timeframeDays", type: "number", description: "Number of days to analyze. Default: 180", required: false }
       ],
       handler: async ({ address, chainId, timeframeDays }: { address: string; chainId?: number; timeframeDays?: number }) => {
-        return await getTokenActivity(address, chainId || 1, timeframeDays);
+        try {
+          return await getTokenActivity(address, chainId || 1, timeframeDays);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          console.error(`❌ Token Activity Analysis Error: ${errorMessage}`);
+          return { error: true, message: errorMessage };
+        }
       }
     },
     {
@@ -78,10 +102,16 @@ const runtime = new CopilotRuntime({
       description: "Get general stats: total gas fees spent, active days, and transaction counts.",
       parameters: [
         strictAddressParam,
-        { name: "chainId", type: "number" }
+        { name: "chainId", type: "number", description: "The chain ID. Default: 1 (Ethereum)", required: false }
       ],
       handler: async ({ address, chainId }: { address: string; chainId?: number }) => {
-        return await getTransactionStats(address, chainId || 1);
+        try {
+          return await getTransactionStats(address, chainId || 1);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          console.error(`❌ Transaction Stats Error: ${errorMessage}`);
+          return { error: true, message: errorMessage };
+        }
       }
     }
   ]
