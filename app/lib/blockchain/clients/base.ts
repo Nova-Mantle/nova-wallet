@@ -113,6 +113,8 @@ export interface BlockchainClient {
    * To be implemented in Phase 3
    */
   getDexTrades?(address: string, options?: FetchOptions): Promise<any[]>;
+
+  getCurrentNativeTokenPrice?(): Promise<number>;
 }
 
 /**
