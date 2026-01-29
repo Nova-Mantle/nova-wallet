@@ -298,12 +298,20 @@ Keep responses helpful and concise!`;
 
 
     // State for slippage prediction
-    const slippageDataRef = useRef<{
+    // State for slippage prediction (History Map for multi-turn chat)
+    const slippageHistoryRef = useRef<Record<string, {
         best_venue: string;
         quotes: any[];
         symbol: string;
         amount: number;
         side: "buy" | "sell";
+        timestamp: number;
+    }>>({});
+
+    // Debounce/Dedupe Ref
+    const lastSlippageRequestRef = useRef<{
+        key: string;
+        timestamp: number;
     } | null>(null);
 
     // State for Portfolio Data
@@ -541,17 +549,39 @@ Keep responses helpful and concise!`;
             { name: "amount", type: "number", description: "Amount of crypto to trade" },
             { name: "side", type: "string", description: "Trade side: 'buy' or 'sell'" },
         ],
-        render: ({ status, args }) => {
-            if (status === "complete" && slippageDataRef.current) {
-                return (
-                    <SlippageCard
-                        symbol={slippageDataRef.current.symbol}
-                        amount={slippageDataRef.current.amount}
-                        side={slippageDataRef.current.side}
-                        quotes={slippageDataRef.current.quotes}
-                    />
-                );
+        render: ({ status, args, result }) => {
+            // Helper to generate key from args
+            const getKey = (s: string, a: number, side: string) =>
+                `${s?.toUpperCase()}-${a}-${side?.toLowerCase()}`;
+
+            if (status === "complete") {
+                // 🙈 HIDE DUPLICATE CARDS
+                // If the handler returned the dedupe message, DO NOT render the card again
+                if (typeof result === "string" && result.includes("already displayed")) {
+                    return (
+                        <div className="flex items-center gap-2 p-2 px-4 bg-gray-50 rounded-lg text-xs text-gray-400 italic mt-1 border border-gray-100 w-fit">
+                            <span>↪️ Refer to the prediction above</span>
+                        </div>
+                    );
+                }
+
+                if (args.symbol && args.amount) {
+                    const key = getKey(args.symbol, args.amount, args.side as string);
+                    const data = slippageHistoryRef.current[key];
+
+                    if (data) {
+                        return (
+                            <SlippageCard
+                                symbol={data.symbol}
+                                amount={data.amount}
+                                side={data.side}
+                                quotes={data.quotes}
+                            />
+                        );
+                    }
+                }
             }
+
             if (status === "executing" && (!args.symbol || !args.amount)) {
                 return (
                     <div className="mt-2">
@@ -582,9 +612,23 @@ Keep responses helpful and concise!`;
         },
         handler: async ({ symbol, amount, side }) => {
             console.log("🔥 predictTradeCost action called!", { symbol, amount, side }); // DEBUG
+
             try {
                 // Determine side if not provided or valid
                 const tradeSide = (side && ['buy', 'sell'].includes(side.toLowerCase())) ? side.toLowerCase() : 'sell';
+                const key = `${symbol?.toUpperCase()}-${amount}-${tradeSide}`;
+                const now = Date.now();
+
+                // 🛡️ DEDUPLICATION CHECK
+                if (lastSlippageRequestRef.current &&
+                    lastSlippageRequestRef.current.key === key &&
+                    (now - lastSlippageRequestRef.current.timestamp) < 5000) {
+
+                    console.warn(`⚠️ Duplicate slippage request detected for ${key}. Skipping.`);
+                    return `Prediction already displayed above.`;
+                }
+
+                lastSlippageRequestRef.current = { key, timestamp: now };
 
                 const response = await fetch("/api/ai/predict-cost", {
                     method: "POST",
@@ -596,12 +640,15 @@ Keep responses helpful and concise!`;
 
                 const data = await response.json();
 
-                slippageDataRef.current = {
+                // Store in History Ref
+                slippageHistoryRef.current[key] = {
                     ...data,
                     symbol: symbol.toUpperCase(),
                     amount,
-                    side: tradeSide as "buy" | "sell"
+                    side: tradeSide as "buy" | "sell",
+                    timestamp: now
                 };
+
                 forceUpdate(n => n + 1); // Trigger render
 
                 return `Prediction complete. View the card above.`;
@@ -609,19 +656,24 @@ Keep responses helpful and concise!`;
                 console.error("🔥 predictTradeCost error:", error);
 
                 // Fallback Mock Data if API fails (for demo/resilience)
+                const tradeSide = (side && ['buy', 'sell'].includes(side.toLowerCase())) ? side.toLowerCase() : 'sell';
+                const key = `${symbol?.toUpperCase()}-${amount}-${tradeSide}`;
+
                 const mockQuotes = [
                     { exchange: "binance", quote_price: 98000 * (amount || 1), predicted_slippage_pct: 0.001, total_cost: 98150 * (amount || 1), fees: { trading_fee: 50, slippage_cost: 100 } },
                     { exchange: "kraken", quote_price: 98050 * (amount || 1), predicted_slippage_pct: 0.0015, total_cost: 98250 * (amount || 1), fees: { trading_fee: 60, slippage_cost: 140 } },
                     { exchange: "coinbase", quote_price: 98100 * (amount || 1), predicted_slippage_pct: 0.002, total_cost: 98400 * (amount || 1), fees: { trading_fee: 80, slippage_cost: 220 } },
                 ];
 
-                slippageDataRef.current = {
+                slippageHistoryRef.current[key] = {
                     best_venue: "binance",
                     quotes: mockQuotes,
                     symbol: symbol.toUpperCase(),
                     amount,
-                    side: (side && ['buy', 'sell'].includes(side.toLowerCase())) ? (side.toLowerCase() as "buy" | "sell") : 'sell'
+                    side: tradeSide as "buy" | "sell",
+                    timestamp: Date.now()
                 };
+
                 forceUpdate(n => n + 1);
 
                 return `API Error (${error.message}). Showing simulated data for demonstration.`;
