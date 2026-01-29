@@ -208,15 +208,39 @@ export class EthereumClient implements BlockchainClient {
 
         const endBlock = options?.endBlock ?? 99999999;
 
+        let consecutiveEmptyPages = 0;
+        const MAX_CONSECUTIVE_EMPTY = 2;
+
         while (true) {
             console.log(`[Ethereum]    Fetching ${action} page from block ${startBlock}...`);
 
             const pageResults = await this.fetchPage(action, address, startBlock, endBlock);
 
-            if (pageResults.length === 0) break;
+            if (pageResults.length === 0) {
+                consecutiveEmptyPages++;
+
+                // ✅ Break after multiple consecutive empty pages
+                if (consecutiveEmptyPages >= MAX_CONSECUTIVE_EMPTY) {
+                    console.log(`[Ethereum]    -> ${MAX_CONSECUTIVE_EMPTY} consecutive empty pages, stopping pagination`);
+                    break;
+                }
+
+                // Don't break immediately on first empty page in case of pagination
+                if (allResults.length === 0) {
+                    // First page is empty - likely no transactions
+                    break;
+                }
+            } else {
+                consecutiveEmptyPages = 0; // Reset counter
+            }
 
             const pageLen = pageResults.length;
             allResults.push(...pageResults);
+
+            // Small delay to avoid rate limiting on subsequent pages
+            if (pageResults.length === this.config.etherscanMaxRecords) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
 
             if (
                 allResults.length >= this.config.maxTransactionsPerAddress ||
@@ -246,25 +270,86 @@ export class EthereumClient implements BlockchainClient {
         action: 'txlist' | 'tokentx',
         address: string,
         startBlock: number,
-        endBlock: number
+        endBlock: number,
+        retryCount: number = 0
     ): Promise<Transaction[]> {
+        const MAX_RETRIES = 3;
+        const BASE_DELAY_MS = 2000;
+
         const url = `${this.apiUrl}?chainid=1&module=account&action=${action}&address=${address}&startblock=${startBlock}&endblock=${endBlock}&sort=asc&apikey=${this.config.etherscanApiKey}`;
 
         try {
             const response = await httpClient.get<EtherscanResponse<Transaction[]>>(url);
 
+            // 🐛 DEBUG: Log the actual response
+            console.log(`[Ethereum]    📡 Response: status="${response.status}", message="${response.message}", results=${(response.result || []).length}`);
+
             if (response.status === '1') {
-                return response.result || [];
+                const results = response.result || [];
+
+                // ✅ CRITICAL FIX: Detect suspicious empty responses
+                // If we're querying from an early block (< 23M) and get 0 results,
+                // this might be rate limiting rather than "no transactions"
+                const isSuspiciousEmpty = results.length === 0 &&
+                    startBlock < 23000000 &&
+                    retryCount < MAX_RETRIES;
+
+                // 🐛 DEBUG: Log the check
+                console.log(`[Ethereum]    🔍 Empty check: results=${results.length}, startBlock=${startBlock}, retry=${retryCount}, suspicious=${isSuspiciousEmpty}`);
+
+                if (isSuspiciousEmpty) {
+                    const delay = BASE_DELAY_MS * Math.pow(2, retryCount);
+                    console.warn(
+                        `[Ethereum] ⚠️ Empty response for ${action} from block ${startBlock}. ` +
+                        `Possible rate limit. Retry ${retryCount + 1}/${MAX_RETRIES} in ${delay}ms...`
+                    );
+
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return this.fetchPage(action, address, startBlock, endBlock, retryCount + 1);
+                }
+
+                if (results.length > 0) {
+                    console.log(`[Ethereum]    ✅ Got ${results.length} ${action} results`);
+                } else if (retryCount > 0) {
+                    console.log(`[Ethereum]    ℹ️ Empty result confirmed after ${retryCount} retries`);
+                }
+
+                return results;
+            } else if (response.status === '0' && response.message === 'NOTOK') {
+                // ✅ NEW: Handle NOTOK responses (often rate limiting or temporary API issues)
+                if (retryCount < MAX_RETRIES) {
+                    const delay = BASE_DELAY_MS * Math.pow(2, retryCount);
+                    console.warn(`[Ethereum] ⚠️ Got NOTOK response for ${action}. Retry ${retryCount + 1}/${MAX_RETRIES} in ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return this.fetchPage(action, address, startBlock, endBlock, retryCount + 1);
+                }
+                console.warn(`[Ethereum] ⚠️ NOTOK response persisted after ${MAX_RETRIES} retries, returning empty`);
+                return []; // Return empty after retries
             } else if (response.message.includes('No transactions found')) {
                 return [];
+            } else if (response.message.toLowerCase().includes('rate limit')) {
+                // Explicit rate limit message
+                if (retryCount < MAX_RETRIES) {
+                    const delay = BASE_DELAY_MS * Math.pow(2, retryCount);
+                    console.warn(`[Ethereum] 🚫 Rate limit: ${response.message}. Retry in ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return this.fetchPage(action, address, startBlock, endBlock, retryCount + 1);
+                }
+                throw new APIError(this.chainName, `Rate limit exceeded: ${response.message}`);
             } else {
-                throw new APIError(
-                    this.chainName,
-                    `Etherscan API error: ${response.message}`
-                );
+                throw new APIError(this.chainName, `Etherscan API error: ${response.message}`);
             }
         } catch (error) {
             if (error instanceof APIError) throw error;
+
+            // Network errors might also be rate limiting
+            if (retryCount < MAX_RETRIES) {
+                const delay = BASE_DELAY_MS * Math.pow(2, retryCount);
+                console.warn(`[Ethereum] ⚠️ Network error, retry ${retryCount + 1}/${MAX_RETRIES} in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return this.fetchPage(action, address, startBlock, endBlock, retryCount + 1);
+            }
+
             throw new APIError(
                 this.chainName,
                 error instanceof Error ? error.message : 'Unknown error fetching transactions'
